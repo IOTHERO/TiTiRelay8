@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<title>TiTi Relay-8</title>
+<style>
+:root{--bg:#0a0c11;--bg2:#10131b;--card:rgba(255,255,255,.035);--card2:rgba(255,255,255,.06);--line:rgba(255,255,255,.08);
+--tx:#eef0f6;--mut:#8b93a7;--gold:#d9b46a;--gold2:#f6dfa6;--ok:#36d399;--bad:#ff5d6c;--warn:#ffb547;--info:#6aa8ff;
+--r:18px;--sh:0 10px 40px rgba(0,0,0,.45)}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:Vazirmatn,"Segoe UI",Tahoma,system-ui,sans-serif;color:var(--tx);background:var(--bg);
+background-image:radial-gradient(1200px 600px at 85% -10%,rgba(217,180,106,.13),transparent 60%),
+radial-gradient(900px 500px at -10% 110%,rgba(106,168,255,.08),transparent 60%);background-attachment:fixed;
+font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+[dir=ltr] body{font-family:"Segoe UI",system-ui,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+.hide{display:none!important}
+.gold{background:linear-gradient(135deg,var(--gold),var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent}
+/* login */
+#login{min-height:100%;display:grid;place-items:center;padding:24px}
+.lbox{width:100%;max-width:380px;padding:34px 28px;border-radius:26px;background:linear-gradient(160deg,rgba(255,255,255,.07),rgba(255,255,255,.02));
+border:1px solid var(--line);box-shadow:var(--sh);backdrop-filter:blur(18px);animation:rise .6s ease both;text-align:center}
+.logo{width:74px;height:74px;margin:0 auto 14px;border-radius:22px;display:grid;place-items:center;
+background:conic-gradient(from 210deg,var(--gold),#7a5a22,var(--gold2),var(--gold));box-shadow:0 0 40px rgba(217,180,106,.35);animation:glow 3s ease-in-out infinite}
+.logo svg{width:40px;height:40px}
+.lbox h1{font-size:22px;margin-bottom:4px}
+.lbox p{color:var(--mut);margin-bottom:22px;font-size:13px}
+/* layout */
+#app{display:grid;grid-template-columns:240px 1fr;min-height:100%}
+aside{position:sticky;top:0;height:100vh;padding:22px 16px;border-inline-end:1px solid var(--line);background:rgba(10,12,17,.6);backdrop-filter:blur(16px);display:flex;flex-direction:column;gap:6px}
+.brand{display:flex;align-items:center;gap:12px;padding:6px 8px 20px}
+.brand .logo{width:42px;height:42px;margin:0;border-radius:13px}.brand .logo svg{width:22px;height:22px}
+.brand b{display:block;font-size:15px}.brand small{color:var(--mut);font-size:11px}
+.nav{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:14px;cursor:pointer;color:var(--mut);border:1px solid transparent;transition:.25s;background:none;text-align:start;width:100%}
+.nav svg{width:20px;height:20px;flex:none}
+.nav:hover{color:var(--tx);background:var(--card)}
+.nav.on{color:var(--tx);background:linear-gradient(135deg,rgba(217,180,106,.18),rgba(217,180,106,.04));border-color:rgba(217,180,106,.3)}
+.nav.on svg{color:var(--gold)}
+.side-foot{margin-top:auto;display:flex;flex-direction:column;gap:8px}
+main{padding:22px clamp(16px,3vw,36px) 120px;max-width:1180px;width:100%}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:22px}
+header h2{font-size:22px;font-weight:700;margin-inline-end:auto}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:12px;color:var(--mut);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--mut);flex:none}
+.dot.ok{background:var(--ok);box-shadow:0 0 10px var(--ok);animation:pulse 2s infinite}
+.dot.bad{background:var(--bad);box-shadow:0 0 10px var(--bad)}
+.dot.warn{background:var(--warn);box-shadow:0 0 10px var(--warn);animation:pulse 1s infinite}
+.page{display:none;animation:rise .45s ease both}.page.on{display:block}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px;position:relative;overflow:hidden;transition:border-color .3s,transform .3s}
+.card h3{font-size:15px;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.card h3 small{color:var(--mut);font-weight:400;font-size:12px;margin-inline-start:auto}
+.card .sub{color:var(--mut);font-size:12.5px;margin:-8px 0 14px}
+.stat{padding:18px}
+.stat .k{color:var(--mut);font-size:12px}
+.stat .v{font-size:24px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums;direction:ltr;text-align:start}
+[dir=rtl] .stat .v{text-align:right}
+.hero{background:linear-gradient(135deg,rgba(217,180,106,.16),rgba(255,255,255,.02) 55%);border-color:rgba(217,180,106,.25)}
+.hero .big{font-size:28px;font-weight:800}
+.alert{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;margin-bottom:12px;font-size:13px;border:1px solid}
+.alert.warn{background:rgba(255,181,71,.08);border-color:rgba(255,181,71,.3);color:#ffd79a}
+.alert.bad{background:rgba(255,93,108,.08);border-color:rgba(255,93,108,.3);color:#ffb3bb}
+.alert.info{background:rgba(106,168,255,.08);border-color:rgba(106,168,255,.3);color:#bcd6ff}
+/* forms */
+label.f{display:block;margin-bottom:14px}
+label.f>span{display:block;font-size:12px;color:var(--mut);margin-bottom:6px}
+.in,select.in,textarea.in{width:100%;padding:11px 14px;border-radius:12px;background:rgba(0,0,0,.28);border:1px solid var(--line);outline:none;transition:.2s}
+.in:focus{border-color:rgba(217,180,106,.6);box-shadow:0 0 0 4px rgba(217,180,106,.12)}
+.in.ltr{direction:ltr;text-align:left}
+textarea.in{min-height:110px;font-family:Consolas,monospace;font-size:12px;direction:ltr}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 14px}
+.pw{position:relative}.pw .eye{position:absolute;inset-inline-end:8px;top:50%;transform:translateY(-50%);background:none;border:0;color:var(--mut);cursor:pointer;padding:6px}
+.tg{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;cursor:pointer}
+.tg input{display:none}
+.tg i{width:46px;height:26px;border-radius:99px;background:rgba(255,255,255,.12);position:relative;transition:.3s;flex:none}
+.tg i:after{content:"";position:absolute;top:3px;inset-inline-start:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.3s;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.tg input:checked+i{background:linear-gradient(135deg,var(--gold),#b48a3c)}
+[dir=rtl] .tg input:checked+i:after{transform:translateX(-20px)}
+[dir=ltr] .tg input:checked+i:after{transform:translateX(20px)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 18px;border-radius:12px;border:1px solid var(--line);background:var(--card2);cursor:pointer;transition:.2s;font-weight:600;white-space:nowrap}
+.btn:hover{border-color:rgba(255,255,255,.2);transform:translateY(-1px)}
+.btn:active{transform:translateY(0) scale(.98)}
+.btn.pri{background:linear-gradient(135deg,var(--gold),#b8893a);color:#1a1307;border:0;box-shadow:0 6px 24px rgba(217,180,106,.3)}
+.btn.red{background:rgba(255,93,108,.12);border-color:rgba(255,93,108,.35);color:#ff9aa5}
+.btn.sm{padding:6px 12px;font-size:12px;border-radius:10px}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.btn svg{width:17px;height:17px}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+/* mode cards */
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
+.mode{cursor:pointer;padding:22px;border-radius:20px;border:1.5px solid var(--line);background:var(--card);transition:.3s;text-align:start}
+.mode svg{width:34px;height:34px;color:var(--mut);transition:.3s}
+.mode b{display:block;font-size:17px;margin:10px 0 2px}.mode span{color:var(--mut);font-size:12.5px}
+.mode.on{border-color:var(--gold);background:linear-gradient(150deg,rgba(217,180,106,.16),rgba(217,180,106,.02));box-shadow:0 0 0 4px rgba(217,180,106,.08),var(--sh)}
+.mode.on svg{color:var(--gold)}
+/* scan */
+.nets{max-height:260px;overflow:auto;margin:-4px 0 14px;display:flex;flex-direction:column;gap:6px}
+.net{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.2);border:1px solid var(--line);cursor:pointer;transition:.2s}
+.net:hover{border-color:rgba(217,180,106,.45)}.net.sel{border-color:var(--gold);background:rgba(217,180,106,.08)}
+.net b{flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr;text-align:start}
+.sig{display:flex;gap:2px;align-items:flex-end;height:16px}.sig i{width:4px;border-radius:2px;background:rgba(255,255,255,.15)}
+.sig i.on{background:var(--gold)}
+.spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:var(--gold);border-radius:50%;animation:rot .8s linear infinite;display:inline-block}
+/* servers */
+.srv{border:1px solid var(--line);border-radius:16px;margin-bottom:10px;background:rgba(0,0,0,.15);overflow:hidden}
+.srv>.hd{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
+.srv>.hd b{flex:1}.srv>.bd{padding:4px 14px 14px;display:none}.srv.open>.bd{display:block}
+.num{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:var(--card2);font-size:12px;font-weight:700}
+/* relays */
+.relays{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.rl{padding:18px;border-radius:20px;background:var(--card);border:1px solid var(--line);transition:.35s;position:relative;overflow:hidden}
+.rl:before{content:"";position:absolute;inset:0;background:radial-gradient(240px 140px at 50% -20%,rgba(54,211,153,.25),transparent 70%);opacity:0;transition:.4s}
+.rl.on{border-color:rgba(54,211,153,.45);box-shadow:0 0 30px rgba(54,211,153,.12)}
+.rl.on:before{opacity:1}
+.rl.na{opacity:.45}
+.rl .top{display:flex;align-items:center;justify-content:space-between;position:relative}
+.rl .nm{font-weight:700}.rl .no{font-size:11px;color:var(--mut)}
+.pwr{width:64px;height:64px;border-radius:50%;border:0;cursor:pointer;display:grid;place-items:center;margin:16px auto 12px;position:relative;
+background:radial-gradient(circle at 35% 30%,#2a2f3d,#141720);box-shadow:inset 0 2px 6px rgba(255,255,255,.08),0 8px 20px rgba(0,0,0,.5);transition:.3s;color:var(--mut)}
+.pwr svg{width:28px;height:28px}
+.rl.on .pwr{color:#062016;background:radial-gradient(circle at 35% 30%,#6ff2bf,#1fae74);box-shadow:0 0 0 6px rgba(54,211,153,.15),0 0 36px rgba(54,211,153,.55)}
+.rl.wait .pwr{animation:pulse .6s infinite}
+.rl .meta{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:var(--mut);position:relative}
+.rl .st{font-weight:700;letter-spacing:.5px}.rl.on .st{color:var(--ok)}
+.pulse{display:flex;gap:6px;margin-top:12px;position:relative}
+.pulse .in{padding:6px 8px;text-align:center;direction:ltr}
+.badge{font-size:10px;padding:2px 8px;border-radius:99px;background:rgba(255,181,71,.15);color:var(--warn)}
+/* inputs */
+.dips{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;direction:ltr}
+.dip{text-align:center;font-size:11px;color:var(--mut)}
+.dip .sw{height:54px;border-radius:10px;background:rgba(0,0,0,.35);border:1px solid var(--line);position:relative;margin-bottom:6px}
+.dip .sw:after{content:"";position:absolute;left:5px;right:5px;height:22px;bottom:5px;border-radius:7px;background:#3a3f4d;transition:.35s cubic-bezier(.5,1.6,.5,1)}
+.dip.on .sw:after{bottom:27px;background:linear-gradient(var(--gold2),var(--gold));box-shadow:0 0 14px rgba(217,180,106,.6)}
+.dip.cfg.on .sw:after{background:linear-gradient(#ffd0a0,var(--warn))}
+.addr{display:flex;align-items:baseline;gap:10px;margin-top:16px}
+.addr b{font-size:34px;font-weight:800;font-variant-numeric:tabular-nums}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:start;vertical-align:middle}
+th{color:var(--mut);font-weight:500;font-size:11.5px}
+td .in{padding:7px 10px}
+code{font-family:Consolas,monospace;font-size:12px;background:rgba(255,255,255,.06);padding:1px 6px;border-radius:6px;direction:ltr;display:inline-block}
+/* log */
+.log{height:330px;overflow:auto;background:#05070b;border:1px solid var(--line);border-radius:14px;padding:12px;font-family:Consolas,monospace;font-size:12px;direction:ltr;text-align:left}
+.log div{white-space:pre-wrap;word-break:break-word;padding:1px 0;animation:fade .3s}
+.log .l0{color:#ff8a95}.log .l1{color:#ffc76b}.log .l2{color:#c9d1e3}.log .l3{color:#7f889c}
+.log span{color:#4d566a;margin-right:8px}
+.prog{height:8px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:12px}
+.prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold),var(--gold2));transition:width .2s}
+/* save bar */
+.savebar{position:fixed;bottom:18px;left:50%;transform:translate(-50%,140%);display:flex;align-items:center;gap:14px;padding:10px 12px 10px 18px;border-radius:18px;
+background:rgba(20,22,30,.92);border:1px solid rgba(217,180,106,.35);box-shadow:var(--sh);backdrop-filter:blur(14px);transition:.4s cubic-bezier(.3,1.4,.5,1);z-index:30;visibility:hidden}
+[dir=rtl] .savebar{padding:10px 18px 10px 12px}
+.savebar.show{transform:translate(-50%,0);visibility:visible}
+/* modal & toast */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);display:grid;place-items:center;z-index:50;padding:20px;animation:fade .25s}
+.modal .box{width:100%;max-width:420px;background:#141720;border:1px solid var(--line);border-radius:22px;padding:26px;box-shadow:var(--sh);animation:rise .35s}
+.modal h3{font-size:18px;margin-bottom:8px}.modal p{color:var(--mut);margin-bottom:18px}
+.swstate{display:flex;align-items:center;gap:12px;padding:14px;border-radius:14px;background:rgba(0,0,0,.25);border:1px solid var(--line);margin-bottom:18px;font-weight:600}
+#toasts{position:fixed;top:16px;inset-inline-end:16px;display:flex;flex-direction:column;gap:8px;z-index:60}
+.toast{padding:12px 16px;border-radius:14px;background:#171a24;border:1px solid var(--line);box-shadow:var(--sh);animation:slide .35s;min-width:220px;border-inline-start:3px solid var(--gold)}
+.toast.bad{border-inline-start-color:var(--bad)}.toast.ok{border-inline-start-color:var(--ok)}
+/* mobile dock */
+.dock{display:none}
+@media(max-width:860px){
+#app{grid-template-columns:1fr}aside{display:none}
+main{padding-bottom:130px}
+.dock{display:flex;position:fixed;bottom:12px;left:12px;right:12px;justify-content:space-around;padding:8px;border-radius:22px;background:rgba(18,20,28,.85);border:1px solid var(--line);backdrop-filter:blur(18px);z-index:20;box-shadow:var(--sh)}
+.dock .nav{flex-direction:column;gap:2px;font-size:10.5px;padding:8px 6px;justify-content:center;align-items:center;text-align:center}
+.savebar{bottom:96px}
+.modes{grid-template-columns:1fr}
+}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes slide{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+@keyframes pulse{50%{opacity:.45}}
+@keyframes rot{to{transform:rotate(360deg)}}
+@keyframes glow{50%{box-shadow:0 0 60px rgba(217,180,106,.55)}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+<symbol id="i-logo" viewBox="0 0 24 24"><path fill="#1a1307" d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+<symbol id="i-dash" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M4 13h6V4H4zm10 7h6v-9h-6zM4 20h6v-3H4zm10-13h6V4h-6z"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M5 12.5a10 10 0 0 1 14 0M8 15.5a6 6 0 0 1 8 0M12 19h.01M2 9a14.5 14.5 0 0 1 20 0"/></symbol>
+<symbol id="i-rl" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 3v8M6.4 6.4a8 8 0 1 0 11.2 0"/></symbol>
+<symbol id="i-sys" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
+<symbol id="i-rs" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M3 7h18M3 17h18M7 7v10M12 7v10M17 7v10"/></symbol>
+<symbol id="i-re" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" d="M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+</svg>
+
+<section id="login">
+  <div class="lbox">
+    <div class="logo"><svg><use href="#i-logo"/></svg></div>
+    <h1><span class="gold" id="lname">TiTi Relay-8</span></h1>
+    <p data-t="loginSub"></p>
+    <label class="f"><span data-t="adminPass"></span>
+      <div class="pw"><input class="in ltr" id="lpass" type="password" autocomplete="current-password">
+      <button class="eye" type="button" data-eye="lpass"><svg width="18" height="18"><use href="#i-eye"/></svg></button></div></label>
+    <button class="btn pri" style="width:100%" id="lbtn" data-t="signIn"></button>
+    <p id="lerr" style="color:var(--bad);margin:12px 0 0"></p>
+    <div style="margin-top:18px"><button class="btn sm" data-lang></button></div>
+  </div>
+</section>
+
+<div id="app" class="hide">
+  <aside>
+    <div class="brand"><div class="logo"><svg><use href="#i-logo"/></svg></div><div><b id="bname">TiTi Relay-8</b><small id="bfw"></small></div></div>
+    <div id="navs"></div>
+    <div class="side-foot">
+      <button class="btn sm" data-lang></button>
+      <button class="btn sm red" data-restart><svg><use href="#i-re"/></svg><span data-t="restart"></span></button>
+    </div>
+  </aside>
+  <main>
+    <header>
+      <h2 id="ptitle"></h2>
+      <span class="chip"><span class="dot" id="wsdot"></span><span id="wstx"></span></span>
+      <span class="chip"><span class="dot" id="cfgdot"></span><span data-t="cfgSwitch"></span>: <b id="cfgtx"></b></span>
+      <button class="btn sm red" data-restart><svg><use href="#i-re"/></svg><span data-t="restart"></span></button>
+    </header>
+
+    <!-- DASHBOARD -->
+    <section class="page" id="p-dash">
+      <div id="alerts"></div>
+      <div class="grid g2" style="margin-bottom:16px">
+        <div class="card hero">
+          <h3 data-t="device"></h3>
+          <div class="big gold" id="dname"></div>
+          <div style="color:var(--mut);margin-top:6px" id="dmode"></div>
+          <div class="bar" style="margin-top:16px">
+            <span class="chip" id="dmac"></span><span class="chip" id="dfw"></span>
+          </div>
+        </div>
+        <div class="card">
+          <h3><span data-t="outputs"></span><small id="donc"></small></h3>
+          <div class="dips" id="dmini"></div>
+          <div class="bar" style="margin-top:16px">
+            <button class="btn sm" data-all="1" data-t="allOn"></button>
+            <button class="btn sm" data-all="0" data-t="allOff"></button>
+            <button class="btn sm" data-go="relays" data-t="openTest"></button>
+          </div>
+        </div>
+      </div>
+      <div class="grid g4">
+        <div class="card stat"><div class="k" data-t="uptime"></div><div class="v" id="sup">-</div></div>
+        <div class="card stat"><div class="k" data-t="address"></div><div class="v" id="sad">-</div></div>
+        <div class="card stat"><div class="k" data-t="heap"></div><div class="v" id="shp">-</div></div>
+        <div class="card stat"><div class="k" data-t="resetReason"></div><div class="v" id="srr" style="font-size:16px">-</div></div>
+        <div class="card stat"><div class="k" data-t="boots"></div><div class="v" id="sbt">-</div></div>
+        <div class="card stat"><div class="k" data-t="apClients"></div><div class="v" id="scl">-</div></div>
+      </div>
+    </section>
+
+    <!-- CONNECTION -->
+    <section class="page" id="p-conn">
+      <div class="modes">
+        <button class="mode" data-mode="1"><svg><use href="#i-link"/></svg><b data-t="mWifi"></b><span data-t="mWifiSub"></span></button>
+        <button class="mode" data-mode="2"><svg><use href="#i-rs"/></svg><b data-t="mRs"></b><span data-t="mRsSub"></span></button>
+      </div>
+      <div class="alert info hide" id="nomode" data-t="chooseMode"></div>
+
+      <div id="wifiPane" class="grid g2 hide">
+        <div class="card">
+          <h3><span data-t="wifiNet"></span><small><button class="btn sm" id="scanBtn"><span data-t="scan"></span></button></small></h3>
+          <div class="nets" id="nets"></div>
+          <label class="f"><span data-t="ssid"></span><input class="in ltr" data-k="wifi.nets.0.ssid" maxlength="32"></label>
+          <label class="f"><span data-t="password"></span><div class="pw"><input class="in ltr" type="password" id="wpass" data-k="wifi.nets.0.pass" data-secret="wifi.nets.0.passSet" maxlength="64">
+            <button class="eye" type="button" data-eye="wpass"><svg width="18" height="18"><use href="#i-eye"/></svg></button></div></label>
+          <details style="margin-bottom:12px"><summary style="cursor:pointer;color:var(--mut);margin-bottom:10px" data-t="backupNet"></summary>
+            <label class="f"><span data-t="ssid"></span><input class="in ltr" data-k="wifi.nets.1.ssid" maxlength="32"></label>
+            <label class="f"><span data-t="password"></span><input class="in ltr" type="password" data-k="wifi.nets.1.pass" data-secret="wifi.nets.1.passSet" maxlength="64"></label>
+          </details>
+          <label class="tg"><span data-t="dhcp"></span><input type="checkbox" data-k="wifi.dhcp"><i></i></label>
+          <div class="row" id="staticIp">
+            <label class="f"><span>IP</span><input class="in ltr" data-k="wifi.ip"></label>
+            <label class="f"><span data-t="gateway"></span><input class="in ltr" data-k="wifi.gateway"></label>
+            <label class="f"><span data-t="subnet"></span><input class="in ltr" data-k="wifi.subnet"></label>
+            <label class="f"><span>DNS 1</span><input class="in ltr" data-k="wifi.dns1"></label>
+            <label class="f"><span>DNS 2</span><input class="in ltr" data-k="wifi.dns2"></label>
+          </div>
+          <div class="row">
+            <label class="f"><span data-t="hostname"></span><input class="in ltr" data-k="wifi.hostname" maxlength="31"></label>
+            <label class="f"><span data-t="ntp"></span><input class="in ltr" data-k="wifi.ntp" maxlength="47"></label>
+          </div>
+          <div class="bar"><button class="btn" id="wtest" data-t="testWifi"></button><span class="chip"><span class="dot" id="wtdot"></span><span id="wttx">-</span></span></div>
+        </div>
+
+        <div class="card">
+          <h3 data-t="servers"></h3>
+          <p class="sub" data-t="serversSub"></p>
+          <div class="row">
+            <label class="f"><span data-t="deviceId"></span><input class="in ltr" data-k="deviceId" maxlength="31"></label>
+            <label class="f"><span data-t="telemetryS"></span><input class="in ltr" type="number" min="5" max="3600" data-k="telemetryS"></label>
+          </div>
+          <div id="srvs"></div>
+          <details><summary style="cursor:pointer;color:var(--mut)" data-t="caTitle"></summary>
+            <p class="sub" style="margin:8px 0" data-t="caSub"></p>
+            <textarea class="in" id="ca" placeholder="-----BEGIN CERTIFICATE-----"></textarea>
+            <div class="bar" style="margin-top:10px"><button class="btn sm" id="caSave" data-t="saveCa"></button><span class="chip" id="caState"></span></div>
+          </details>
+        </div>
+      </div>
+
+      <div id="rsPane" class="grid g2 hide">
+        <div class="card">
+          <h3 data-t="mbTitle"></h3>
+          <label class="tg"><span data-t="addrFromDip"></span><input type="checkbox" data-k="mb.fromDip" data-int><i></i></label>
+          <div class="alert info" id="dipAddr"></div>
+          <label class="f" id="manAddr"><span data-t="manualAddr"></span><input class="in ltr" type="number" min="1" max="247" data-k="mb.addr"></label>
+          <div class="row">
+            <label class="f"><span data-t="baud"></span><select class="in" data-k="mb.baud" data-num>
+              <option>1200</option><option>2400</option><option>4800</option><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></label>
+            <label class="f"><span data-t="parity"></span><select class="in" data-k="mb.parity" data-num>
+              <option value="0" data-t="pNone"></option><option value="1" data-t="pEven"></option><option value="2" data-t="pOdd"></option></select></label>
+            <label class="f"><span data-t="stopBits"></span><select class="in" data-k="mb.stopBits" data-num><option>1</option><option>2</option></select></label>
+            <label class="f"><span data-t="respDelay"></span><input class="in ltr" type="number" min="0" max="500" data-k="mb.respDelayMs"></label>
+          </div>
+          <label class="tg"><span data-t="swap"></span><input type="checkbox" data-k="mb.swap"><i></i></label>
+          <p class="sub" style="margin:0" data-t="swapSub"></p>
+        </div>
+        <div class="card">
+          <h3 data-t="regMap"></h3>
+          <table><thead><tr><th data-t="table"></th><th data-t="addrCol"></th><th data-t="meaning"></th></tr></thead><tbody id="regs"></tbody></table>
+        </div>
+      </div>
+
+      <div class="card" id="lossCard" style="margin-top:16px">
+        <h3 data-t="lossTitle"></h3>
+        <p class="sub" data-t="lossSub"></p>
+        <div class="row">
+          <label class="f"><span data-t="lossTimeout"></span><input class="in ltr" type="number" min="0" max="3600" data-k="link.timeoutS"></label>
+          <label class="f"><span data-t="lossAction"></span><select class="in" data-k="link.action" data-num>
+            <option value="0" data-t="lHold"></option><option value="1" data-t="lOff"></option><option value="2" data-t="lPreset"></option></select></label>
+        </div>
+        <div class="bar" id="presetMask"></div>
+      </div>
+    </section>
+
+    <!-- RELAYS & TEST -->
+    <section class="page" id="p-relays">
+      <div class="card" style="margin-bottom:16px">
+        <div class="bar">
+          <button class="btn" data-all="1" data-t="allOn"></button>
+          <button class="btn" data-all="0" data-t="allOff"></button>
+          <button class="btn" id="walk" data-t="walk"></button>
+          <button class="btn" id="ident" data-t="identify"></button>
+          <span class="chip" style="margin-inline-start:auto"><span data-t="onCount"></span>: <b id="onc">0</b></span>
+        </div>
+      </div>
+      <div class="relays" id="relays" style="margin-bottom:16px"></div>
+      <div class="grid g2">
+        <div class="card">
+          <h3><span data-t="inputs"></span><small data-t="inputsSub"></small></h3>
+          <div class="dips" id="dips"></div>
+          <div class="addr"><span style="color:var(--mut)" data-t="dipAddress"></span><b class="gold" id="dipv">0</b><span class="chip" id="dipbin"></span></div>
+        </div>
+        <div class="card">
+          <h3 data-t="relaySet"></h3>
+          <div class="row">
+            <label class="f"><span data-t="minInterval"></span><input class="in ltr" type="number" min="0" max="10000" data-k="relays.minIntervalMs"></label>
+            <label class="f"><span data-t="stagger"></span><input class="in ltr" type="number" min="0" max="1000" data-k="relays.staggerMs"></label>
+          </div>
+          <div style="overflow:auto"><table><thead><tr><th>#</th><th data-t="name"></th><th data-t="powerOn"></th><th data-t="interlock"></th></tr></thead><tbody id="rset"></tbody></table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SYSTEM -->
+    <section class="page" id="p-sys">
+      <div class="grid g2">
+        <div class="card">
+          <h3 data-t="general"></h3>
+          <label class="f"><span data-t="devName"></span><input class="in" data-k="deviceName" maxlength="31"></label>
+          <label class="f"><span data-t="newAdmin"></span><input class="in ltr" type="password" data-k="system.adminPass" data-secret="1" maxlength="32" autocomplete="new-password"></label>
+          <label class="f"><span data-t="apPass"></span><input class="in ltr" type="password" data-k="system.apPass" data-secret="1" maxlength="63" autocomplete="new-password"></label>
+          <label class="f"><span data-t="logLevel"></span><select class="in" data-k="system.logLevel" data-num>
+            <option value="0" data-t="lvE"></option><option value="1" data-t="lvW"></option><option value="2" data-t="lvI"></option><option value="3" data-t="lvD"></option></select></label>
+        </div>
+        <div class="card">
+          <h3><span data-t="firmware"></span><small id="fwv"></small></h3>
+          <p class="sub" data-t="otaSub"></p>
+          <input type="file" id="otaFile" accept=".bin" class="in">
+          <label class="tg"><span data-t="otaFs"></span><input type="checkbox" id="otaFs"><i></i></label>
+          <div class="prog"><i id="otaBar"></i></div>
+          <div class="bar" style="margin-top:12px"><button class="btn pri" id="otaBtn" data-t="upload"></button><span id="otaTx" style="color:var(--mut)"></span></div>
+          <hr style="border:0;border-top:1px solid var(--line);margin:20px 0">
+          <h3 data-t="backup"></h3>
+          <div class="bar">
+            <button class="btn" id="bkBtn" data-t="download"></button>
+            <label class="btn"><span data-t="restore"></span><input type="file" id="rsFile" accept=".json" class="hide"></label>
+            <button class="btn red" id="facBtn" data-t="factory"></button>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h3><span data-t="liveLog"></span><small><button class="btn sm" id="logPause" data-t="pause"></button> <button class="btn sm" id="logClear" data-t="clear"></button></small></h3>
+        <div class="log" id="log"></div>
+      </div>
+    </section>
+  </main>
+  <nav class="dock" id="dock"></nav>
+</div>
+
+<div class="savebar" id="savebar"><span data-t="unsaved"></span><button class="btn sm" id="discard" data-t="discard"></button><button class="btn pri sm" id="save" data-t="save"></button></div>
+<div id="toasts"></div>
+<div id="modal"></div>
+
+<script>
+"use strict";
+const T={fa:{loginSub:"برای ورود به تنظیمات ماژول، رمز مدیر را وارد کنید",adminPass:"رمز مدیر",signIn:"ورود",wrongPass:"رمز نادرست است",locked:"چند بار رمز اشتباه وارد شد؛ یک دقیقه صبر کنید",
+dash:"داشبورد",conn:"ارتباط",relays:"رله‌ها و تست",sys:"سیستم",restart:"راه‌اندازی مجدد",cfgSwitch:"کلید کانفیگ",on:"روشن",off:"خاموش",live:"زنده",offline:"قطع",
+device:"دستگاه",outputs:"خروجی‌ها",allOn:"همه روشن",allOff:"همه خاموش",openTest:"صفحهٔ تست",uptime:"زمان کارکرد",address:"آدرس مدباس",heap:"حافظهٔ آزاد",resetReason:"علت آخرین ریست",boots:"تعداد روشن شدن",apClients:"کاربران متصل",
+mWifi:"وای‌فای / MQTT",mWifiSub:"اتصال مستقیم به سرور پلتفرم از طریق شبکهٔ وای‌فای",mRs:"RS-485 / Modbus RTU",mRsSub:"اتصال به هاب مرکزی یا PLC روی باس RS-485",chooseMode:"ابتدا نوع ارتباط را انتخاب کنید.",
+wifiNet:"شبکهٔ وای‌فای",scan:"جستجو",scanning:"در حال جستجو…",noNets:"شبکه‌ای پیدا نشد",ssid:"نام شبکه (SSID)",password:"رمز",savedPass:"•••••• (ذخیره شده — برای تغییر بنویسید)",backupNet:"شبکهٔ پشتیبان (اختیاری)",dhcp:"دریافت خودکار IP (DHCP)",gateway:"گیت‌وی",subnet:"Subnet",hostname:"نام میزبان",ntp:"سرور زمان (NTP)",
+testWifi:"تست اتصال وای‌فای",servers:"سرورها",serversSub:"به ترتیب امتحان می‌شوند؛ اگر یکی در دسترس نباشد سراغ بعدی می‌رود.",deviceId:"شناسهٔ دستگاه (Device ID)",telemetryS:"دورهٔ ارسال وضعیت (ثانیه)",
+srvEnabled:"فعال",srvName:"نام",proto:"پروتکل",pPlatform:"پلتفرم TiTiSwitch",pGeneric:"MQTT عمومی",host:"آدرس سرور",port:"پورت",tls:"اتصال امن (TLS)",user:"نام کاربری",clientId:"Client ID (خالی = خودکار)",prefix:"پیشوند تاپیک",base:"تاپیک پایه",keepalive:"Keepalive (ثانیه)",qos:"QoS",test:"تست",up:"بالا",
+caTitle:"گواهی CA اختصاصی (اختیاری)",caSub:"برای سرور با گواهی داخلی. خالی = گواهی‌های عمومی داخلی دستگاه.",saveCa:"ذخیرهٔ گواهی",caSet:"گواهی ثبت شده",caNone:"گواهی داخلی",
+mbTitle:"تنظیمات Modbus RTU",addrFromDip:"آدرس از دیپ‌سوئیچ (AD1..AD7)",manualAddr:"آدرس دستی (۱ تا ۲۴۷)",baud:"سرعت (Baud)",parity:"Parity",pNone:"None",pEven:"Even",pOdd:"Odd",stopBits:"Stop bits",respDelay:"تأخیر پاسخ (ms)",swap:"جابه‌جایی RX / TX",swapSub:"اگر برد پاسخ نمی‌دهد و سیم‌کشی درست است، این را فعال کنید (TX=GPIO17، RX=GPIO16).",
+regMap:"نقشهٔ رجیسترها",table:"جدول",addrCol:"آدرس",meaning:"کاربرد",lossTitle:"قطع ارتباط",lossSub:"اگر در این مدت پیامی از سرور یا Master نرسد، این اقدام یک بار انجام می‌شود. صفر = غیرفعال.",lossTimeout:"مهلت (ثانیه)",lossAction:"اقدام",lHold:"حفظ وضعیت فعلی",lOff:"خاموش کردن همهٔ رله‌ها",lPreset:"وضعیت از پیش تعیین شده",
+walk:"تست ترتیبی",identify:"شناسایی (چشمک LED)",onCount:"روشن",inputs:"ورودی‌ها",inputsSub:"زنده",dipAddress:"آدرس دیپ‌سوئیچ",relaySet:"تنظیمات رله‌ها",minInterval:"فاصلهٔ حداقل هر رله (ms)",stagger:"فاصلهٔ روشن شدن کویل‌ها (ms)",name:"نام",powerOn:"پس از وصل برق",interlock:"اینترلاک با",pRestore:"آخرین وضعیت",pOff:"خاموش",pOn:"روشن",none:"—",
+pulse:"پالس",sec:"ثانیه",notFitted:"رزرو (GPIO12)",cycles:"دفعات",
+general:"عمومی",devName:"نام دستگاه",newAdmin:"رمز جدید مدیر (خالی = بدون تغییر)",apPass:"رمز وای‌فای پیکربندی (خالی = بدون تغییر)",logLevel:"سطح گزارش سریال",lvE:"فقط خطا",lvW:"هشدار",lvI:"اطلاعات",lvD:"اشکال‌زدایی",
+firmware:"به‌روزرسانی Firmware",otaSub:"فایل .bin خروجی Arduino را انتخاب کنید. پس از نصب، دستگاه خودش ریست می‌شود.",upload:"نصب",otaFs:"فایل رابط کاربری (LittleFS) است، نه Firmware",backup:"پشتیبان تنظیمات",download:"دریافت فایل",restore:"بازگردانی",factory:"بازگشت به تنظیمات کارخانه",liveLog:"گزارش زنده",pause:"توقف",resume:"ادامه",clear:"پاک کردن",
+unsaved:"تغییرات ذخیره نشده",discard:"لغو",save:"ذخیره",saved:"ذخیره شد",invalid:"مقدار نامعتبر: ",
+rsTitle:"راه‌اندازی مجدد",rsText:"آیا کلید کانفیگ (دیپ ۸) را خاموش کرده‌اید؟ اگر روشن بماند، دستگاه دوباره وارد همین منو می‌شود.",rsOn:"کلید کانفیگ هنوز روشن است",rsOff:"کلید کانفیگ خاموش است — آماده",rsGo:"ریست کن",cancel:"انصراف",restarting:"در حال راه‌اندازی مجدد…",
+facTitle:"بازگشت به تنظیمات کارخانه",facText:"همهٔ تنظیمات، رمزها و وضعیت ذخیره‌شدهٔ رله‌ها پاک می‌شود. برای تأیید RESET را بنویسید.",
+safe:"حالت ایمن: دستگاه چند بار پشت سر هم ریست غیرعادی شده؛ رله‌ها خاموش شروع شدند.",adminDef:"رمز مدیر هنوز پیش‌فرض (admin) است. در صفحهٔ سیستم آن را تغییر دهید.",cfgStill:"کلید کانفیگ روشن است. بعد از پایان تنظیمات آن را خاموش و دستگاه را ریست کنید.",modeNone:"نوع ارتباط هنوز انتخاب نشده است.",
+connecting:"در حال اتصال",connected:"متصل",retry:"تلاش دوباره",idle:"—",ok:"موفق",failed:"ناموفق",testing:"در حال تست",days:"روز",saveFirst:"ابتدا تغییرات را ذخیره کنید",sent:"ارسال شد",busy:"صف فرمان پر است",interlockErr:"اینترلاک باید دوطرفه باشد",
+modeW:"حالت کاری: وای‌فای / MQTT",modeR:"حالت کاری: RS-485 / Modbus RTU",modeU:"حالت کاری: تعیین نشده"},
+en:{loginSub:"Enter the admin password to configure the module",adminPass:"Admin password",signIn:"Sign in",wrongPass:"Wrong password",locked:"Too many wrong passwords; wait a minute",
+dash:"Dashboard",conn:"Connection",relays:"Relays & test",sys:"System",restart:"Restart",cfgSwitch:"Config switch",on:"ON",off:"OFF",live:"Live",offline:"Offline",
+device:"Device",outputs:"Outputs",allOn:"All ON",allOff:"All OFF",openTest:"Test page",uptime:"Uptime",address:"Modbus address",heap:"Free memory",resetReason:"Last reset",boots:"Power-ups",apClients:"Connected clients",
+mWifi:"Wi-Fi / MQTT",mWifiSub:"Straight to the platform server over Wi-Fi",mRs:"RS-485 / Modbus RTU",mRsSub:"To the central hub or a PLC on the RS-485 bus",chooseMode:"Choose the connection type first.",
+wifiNet:"Wi-Fi network",scan:"Scan",scanning:"Scanning…",noNets:"No networks found",ssid:"Network (SSID)",password:"Password",savedPass:"•••••• (saved — type to change)",backupNet:"Backup network (optional)",dhcp:"Automatic IP (DHCP)",gateway:"Gateway",subnet:"Subnet",hostname:"Host name",ntp:"Time server (NTP)",
+testWifi:"Test Wi-Fi",servers:"Servers",serversSub:"Tried in order; the next one is used when one cannot be reached.",deviceId:"Device ID",telemetryS:"Status period (s)",
+srvEnabled:"Enabled",srvName:"Name",proto:"Protocol",pPlatform:"TiTiSwitch platform",pGeneric:"Generic MQTT",host:"Server address",port:"Port",tls:"Secure (TLS)",user:"Username",clientId:"Client ID (empty = automatic)",prefix:"Topic prefix",base:"Base topic",keepalive:"Keepalive (s)",qos:"QoS",test:"Test",up:"Up",
+caTitle:"Custom CA certificate (optional)",caSub:"For a server with a private certificate. Empty = the built-in public CAs.",saveCa:"Save certificate",caSet:"Certificate set",caNone:"Built-in CAs",
+mbTitle:"Modbus RTU settings",addrFromDip:"Address from DIP switch (AD1..AD7)",manualAddr:"Manual address (1..247)",baud:"Baud rate",parity:"Parity",pNone:"None",pEven:"Even",pOdd:"Odd",stopBits:"Stop bits",respDelay:"Response delay (ms)",swap:"Swap RX / TX",swapSub:"If the board does not answer and the wiring is right, turn this on (TX=GPIO17, RX=GPIO16).",
+regMap:"Register map",table:"Table",addrCol:"Address",meaning:"Meaning",lossTitle:"Link loss",lossSub:"When nothing arrives from the server or the master for this long, this action runs once. 0 = off.",lossTimeout:"Timeout (s)",lossAction:"Action",lHold:"Keep outputs",lOff:"All relays OFF",lPreset:"Preset outputs",
+walk:"Walk test",identify:"Identify (blink LEDs)",onCount:"On",inputs:"Inputs",inputsSub:"live",dipAddress:"DIP address",relaySet:"Relay settings",minInterval:"Minimum interval per relay (ms)",stagger:"Coil stagger (ms)",name:"Name",powerOn:"After power-up",interlock:"Interlock with",pRestore:"Last state",pOff:"OFF",pOn:"ON",none:"—",
+pulse:"Pulse",sec:"s",notFitted:"Reserved (GPIO12)",cycles:"Cycles",
+general:"General",devName:"Device name",newAdmin:"New admin password (empty = keep)",apPass:"Config Wi-Fi password (empty = keep)",logLevel:"Serial log level",lvE:"Errors only",lvW:"Warnings",lvI:"Info",lvD:"Debug",
+firmware:"Firmware update",otaSub:"Pick the .bin exported by Arduino. The device restarts after installing it.",upload:"Install",otaFs:"This is the web UI image (LittleFS), not firmware",backup:"Settings backup",download:"Download",restore:"Restore",factory:"Factory reset",liveLog:"Live log",pause:"Pause",resume:"Resume",clear:"Clear",
+unsaved:"Unsaved changes",discard:"Discard",save:"Save",saved:"Saved",invalid:"Invalid value: ",
+rsTitle:"Restart",rsText:"Have you turned the config switch (DIP 8) OFF? If it stays ON the device comes back to this menu.",rsOn:"Config switch is still ON",rsOff:"Config switch is OFF — ready",rsGo:"Restart",cancel:"Cancel",restarting:"Restarting…",
+facTitle:"Factory reset",facText:"All settings, passwords and stored relay states are erased. Type RESET to confirm.",
+safe:"Safe mode: several abnormal resets in a row; outputs started OFF.",adminDef:"The admin password is still the default (admin). Change it on the System page.",cfgStill:"The config switch is ON. When done, turn it OFF and restart.",modeNone:"No connection type chosen yet.",
+connecting:"Connecting",connected:"Connected",retry:"Retrying",idle:"—",ok:"OK",failed:"Failed",testing:"Testing",days:"d",saveFirst:"Save your changes first",sent:"Sent",busy:"Command queue full",interlockErr:"Interlocks must point both ways",
+modeW:"Mode: Wi-Fi / MQTT",modeR:"Mode: RS-485 / Modbus RTU",modeU:"Mode: not chosen"}};
+let lang=(()=>{try{return localStorage.getItem("lang")||"fa"}catch(e){return"fa"}})();
+const t=k=>(T[lang]&&T[lang][k])||T.en[k]||k;
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const el=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e};
+let token=(()=>{try{return sessionStorage.getItem("tk")||""}catch(e){return""}})();
+let S=null,S0="",ST={},info={},ws=null,wsOk=false,logPaused=false,page="dash",scanTimer=0;
+const PAGES=[["dash","i-dash"],["conn","i-link"],["relays","i-rl"],["sys","i-sys"]];
+
+function applyLang(){
+  document.documentElement.lang=lang;document.documentElement.dir=lang==="fa"?"rtl":"ltr";
+  $$("[data-t]").forEach(e=>{e.textContent=t(e.dataset.t)});
+  $$("[data-lang]").forEach(b=>b.textContent=lang==="fa"?"English":"فارسی");
+  $("#ptitle").textContent=t(page);
+  if(S){buildServers();buildRelaySettings();buildRegs();buildPreset();fill()}
+  buildRelays();secretHints();
+}
+function toast(msg,kind){const d=el("div","toast "+(kind||""),msg);$("#toasts").appendChild(d);setTimeout(()=>d.remove(),3500)}
+async function api(path,body,method){
+  const o={method:method||(body!==undefined?"POST":"GET"),headers:{"X-Auth":token}};
+  if(body!==undefined){o.headers["Content-Type"]="application/json";o.body=JSON.stringify(body)}
+  const r=await fetch(path,o);let j={};try{j=await r.json()}catch(e){}
+  if(r.status===401){logout();throw new Error("login")}
+  if(!r.ok){const e=new Error(j.error||r.status);e.field=j.field;throw e}
+  return j;
+}
+/* ---------- login ---------- */
+async function login(){
+  $("#lerr").textContent="";
+  try{const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:$("#lpass").value})});
+    const j=await r.json();
+    if(!r.ok){$("#lerr").textContent=t(j.error==="locked"?"locked":"wrongPass");return}
+    token=j.token;try{sessionStorage.setItem("tk",token)}catch(e){}
+    start();
+  }catch(e){$("#lerr").textContent=e.message}
+}
+function logout(){token="";try{sessionStorage.removeItem("tk")}catch(e){}$("#app").classList.add("hide");$("#login").classList.remove("hide");if(ws)ws.close()}
+async function start(){
+  try{S=await api("/api/settings")}catch(e){return}
+  S0=JSON.stringify(S);
+  $("#login").classList.add("hide");$("#app").classList.remove("hide");
+  applyLang();info2();wsUi();connectWs();
+  try{ST=await api("/api/state");render()}catch(e){}
+}
+/* ---------- nav ---------- */
+function buildNav(){
+  for(const box of [$("#navs"),$("#dock")]){box.innerHTML="";
+    for(const [id,ic] of PAGES){const b=el("button","nav");b.dataset.go=id;
+      const s=document.createElementNS("http://www.w3.org/2000/svg","svg");const u=document.createElementNS("http://www.w3.org/2000/svg","use");u.setAttribute("href","#"+ic);s.appendChild(u);
+      b.appendChild(s);const sp=el("span");sp.dataset.t=id;sp.textContent=t(id);b.appendChild(sp);box.appendChild(b)}}
+}
+function go(p){page=p;$$(".page").forEach(e=>e.classList.toggle("on",e.id==="p-"+p));$$(".nav").forEach(b=>b.classList.toggle("on",b.dataset.go===p));$("#ptitle").textContent=t(p);window.scrollTo({top:0,behavior:"smooth"})}
+/* ---------- settings binding ---------- */
+const getP=(o,p)=>p.split(".").reduce((a,k)=>a==null?a:a[k],o);
+function setP(o,p,v){const ks=p.split(".");let a=o;for(let i=0;i<ks.length-1;i++)a=a[ks[i]];a[ks[ks.length-1]]=v}
+function fill(){
+  $$("[data-k]").forEach(e=>{const v=getP(S,e.dataset.k);
+    if(e.type==="checkbox")e.checked=!!v;else if(e.dataset.secret)e.value=v||"";else e.value=v==null?"":v});
+  secretHints();modeUi();dipUi();
+}
+function secretHints(){$$("[data-secret]").forEach(e=>{const f=e.dataset.secret;const set=f==="1"?true:S&&getP(S,f);e.placeholder=set?t("savedPass"):""})}
+function onInput(e){
+  const k=e.target.dataset&&e.target.dataset.k;if(!k||!S)return;
+  let v;const x=e.target;
+  if(x.type==="checkbox")v="int" in x.dataset?(x.checked?1:0):x.checked;
+  else if(x.type==="number"||"num" in x.dataset)v=x.value===""?0:Number(x.value);else v=x.value;
+  setP(S,k,v);dirty();
+  if(k==="wifi.dhcp")modeUi();if(k==="mb.fromDip")dipUi();if(k==="link.action")buildPreset();
+  if(k.startsWith("servers."))refreshSrvHead();
+}
+function dirty(){$("#savebar").classList.toggle("show",JSON.stringify(S)!==S0)}
+async function save(){
+  try{await api("/api/settings",S);toast(t("saved"),"ok");S=await api("/api/settings");S0=JSON.stringify(S);fill();buildServers();buildRelaySettings();dirty()}
+  catch(e){toast(e.field?t("invalid")+e.field:e.message,"bad")}
+}
+function discard(){S=JSON.parse(S0);fill();buildServers();buildRelaySettings();buildPreset();dirty()}
+function modeUi(){
+  $$(".mode").forEach(b=>b.classList.toggle("on",+b.dataset.mode===S.mode));
+  $("#wifiPane").classList.toggle("hide",S.mode!==1);$("#rsPane").classList.toggle("hide",S.mode!==2);
+  $("#nomode").classList.toggle("hide",S.mode===1||S.mode===2);$("#lossCard").classList.toggle("hide",!S.mode);
+  $("#staticIp").classList.toggle("hide",!!S.wifi.dhcp);
+}
+function dipUi(){$("#manAddr").classList.toggle("hide",!!S.mb.fromDip);$("#dipAddr").classList.toggle("hide",!S.mb.fromDip)}
+/* ---------- servers ---------- */
+function field(lbl,key,type,extra){const l=el("label","f");l.appendChild(el("span",null,t(lbl)));let i;
+  if(type==="select"){i=el("select","in");for(const [v,n] of extra){const o=el("option",null,t(n));o.value=v;i.appendChild(o)}i.dataset.num=""}
+  else{i=el("input","in"+(type==="text"&&lbl!=="srvName"?" ltr":""));i.type=type;if(type==="password"){i.dataset.secret=key.replace(/pass$/,"passSet");i.autocomplete="new-password"}}
+  i.dataset.k=key;l.appendChild(i);return l}
+function tog(lbl,key){const l=el("label","tg");l.appendChild(el("span",null,t(lbl)));const i=el("input");i.type="checkbox";i.dataset.k=key;l.appendChild(i);l.appendChild(el("i"));return l}
+function buildServers(){
+  const box=$("#srvs");const open=$$(".srv.open").map(e=>e.dataset.i);box.innerHTML="";
+  S.servers.forEach((s,i)=>{
+    const w=el("div","srv"+(open.includes(String(i))||(!open.length&&i===0)?" open":""));w.dataset.i=i;
+    const hd=el("div","hd");hd.appendChild(el("span","num",String(i+1)));hd.appendChild(el("b",null,s.name));
+    const dot=el("span","dot"+(s.enabled?" ok":""));hd.appendChild(dot);
+    if(i>0){const up=el("button","btn sm",t("up"));up.onclick=ev=>{ev.stopPropagation();const a=S.servers;[a[i-1],a[i]]=[a[i],a[i-1]];buildServers();dirty()};hd.appendChild(up)}
+    hd.onclick=()=>w.classList.toggle("open");w.appendChild(hd);
+    const bd=el("div","bd");const p="servers."+i+".";
+    bd.appendChild(tog("srvEnabled",p+"enabled"));
+    const r1=el("div","row");r1.appendChild(field("srvName",p+"name","text"));r1.appendChild(field("proto",p+"proto","select",[[0,"pPlatform"],[1,"pGeneric"]]));bd.appendChild(r1);
+    const r2=el("div","row");r2.appendChild(field("host",p+"host","text"));r2.appendChild(field("port",p+"port","number"));bd.appendChild(r2);
+    bd.appendChild(tog("tls",p+"tls"));
+    const r3=el("div","row");r3.appendChild(field("user",p+"user","text"));r3.appendChild(field("password",p+"pass","password"));bd.appendChild(r3);
+    const r4=el("div","row");r4.appendChild(field(s.proto==1?"base":"prefix",p+"prefix","text"));r4.appendChild(field("clientId",p+"clientId","text"));bd.appendChild(r4);
+    const r5=el("div","row");r5.appendChild(field("keepalive",p+"keepalive","number"));r5.appendChild(field("qos",p+"qos","select",[[0,"0"],[1,"1"]]));bd.appendChild(r5);
+    const bar=el("div","bar");const tb=el("button","btn sm",t("test"));tb.onclick=()=>mqttTest(i);bar.appendChild(tb);
+    const ch=el("span","chip");ch.id="mt"+i;bar.appendChild(ch);bd.appendChild(bar);
+    w.appendChild(bd);box.appendChild(w);
+  });
+  fill();
+}
+function refreshSrvHead(){$$(".srv").forEach(w=>{const s=S.servers[w.dataset.i];w.querySelector(".hd b").textContent=s.name;w.querySelector(".hd .dot").className="dot"+(s.enabled?" ok":"")})}
+let mtIdx=-1;
+async function mqttTest(i){
+  if(JSON.stringify(S)!==S0){toast(t("saveFirst"),"bad");return}
+  mtIdx=i;$("#mt"+i).textContent=t("testing")+"…";
+  if(!ST.wifi||ST.wifi.st!=="connected"){await api("/api/action",{do:"wifiTest"});setTimeout(()=>api("/api/action",{do:"mqttTest",server:i}),9000)}
+  else api("/api/action",{do:"mqttTest",server:i});
+}
+/* ---------- scan ---------- */
+function bars(rssi){const s=el("span","sig");const n=rssi>-55?4:rssi>-67?3:rssi>-78?2:1;for(let i=1;i<=4;i++){const b=el("i",i<=n?"on":"");b.style.height=(i*4)+"px";s.appendChild(b)}return s}
+async function scan(fresh){
+  const box=$("#nets");if(fresh){box.innerHTML="";const d=el("div","net");d.appendChild(el("span","spin"));d.appendChild(el("b",null,t("scanning")));box.appendChild(d)}
+  clearTimeout(scanTimer);
+  try{const j=await api("/api/scan"+(fresh?"?fresh=1":""));
+    if(j.running){scanTimer=setTimeout(()=>scan(false),1200);return}
+    box.innerHTML="";const list=(j.nets||[]).sort((a,b)=>b.rssi-a.rssi);
+    if(!list.length)box.appendChild(el("div","net",t("noNets")));
+    for(const n of list){const d=el("div","net"+(n.ssid===S.wifi.nets[0].ssid?" sel":""));d.appendChild(bars(n.rssi));d.appendChild(el("b",null,n.ssid));
+      d.appendChild(el("small",null,n.rssi+" dBm · ch"+n.ch));
+      if(n.lock){const s=document.createElementNS("http://www.w3.org/2000/svg","svg");s.setAttribute("width","14");s.setAttribute("height","14");const u=document.createElementNS("http://www.w3.org/2000/svg","use");u.setAttribute("href","#i-lock");s.appendChild(u);d.appendChild(s)}
+      d.onclick=()=>{S.wifi.nets[0].ssid=n.ssid;S.wifi.nets[0].pass="";fill();dirty();$$(".net").forEach(x=>x.classList.remove("sel"));d.classList.add("sel");$("#wpass").focus()};box.appendChild(d)}
+  }catch(e){}
+}
+/* ---------- relays ---------- */
+function buildRelays(){
+  const box=$("#relays");box.innerHTML="";const mini=$("#dmini");mini.innerHTML="";
+  for(let i=0;i<8;i++){
+    const fitted=S?S.relays.items[i].fitted:i<7;const name=S?S.relays.items[i].name:"Relay "+(i+1);
+    const c=el("div","rl"+(fitted?"":" na"));c.id="rl"+i;
+    const top=el("div","top");const nb=el("div");nb.appendChild(el("div","nm",name));nb.appendChild(el("div","no","K"+(i+1)+(i<2?" · NO/NC":" · NO")));top.appendChild(nb);
+    if(!fitted)top.appendChild(el("span","badge",t("notFitted")));else{const st=el("span","st",t("off"));top.appendChild(st)}
+    c.appendChild(top);
+    const b=el("button","pwr");b.disabled=!fitted;const s=document.createElementNS("http://www.w3.org/2000/svg","svg");const u=document.createElementNS("http://www.w3.org/2000/svg","use");u.setAttribute("href","#i-rl");s.appendChild(u);b.appendChild(s);
+    b.onclick=()=>relay(i,!((ST.relays>>i)&1));c.appendChild(b);
+    const m=el("div","meta");m.appendChild(el("span",null,t("cycles")+": "));const cy=el("b","cy","0");m.firstChild.appendChild(cy);c.appendChild(m);
+    if(fitted){const p=el("div","pulse");const inp=el("input","in");inp.type="number";inp.min="0.1";inp.step="0.1";inp.value="1";inp.style.width="70px";
+      const pb=el("button","btn sm",t("pulse")+" ("+t("sec")+")");pb.style.flex="1";pb.onclick=()=>pulse(i,+inp.value);p.appendChild(inp);p.appendChild(pb);c.appendChild(p)}
+    box.appendChild(c);
+    const d=el("div","dip");d.id="mr"+i;d.appendChild(el("div","sw"));d.appendChild(el("span",null,"K"+(i+1)));mini.appendChild(d);
+  }
+  const dips=$("#dips");dips.innerHTML="";
+  for(let i=0;i<8;i++){const d=el("div","dip"+(i===7?" cfg":""));d.id="dp"+i;d.appendChild(el("div","sw"));d.appendChild(el("span",null,i===7?"CFG":"AD"+(i+1)));dips.appendChild(d)}
+  render();
+}
+async function relay(i,on){$("#rl"+i).classList.add("wait");try{await api("/api/relay",{r:i,on})}catch(e){toast(e.message==="busy"?t("busy"):e.message,"bad")}}
+async function pulse(i,s){if(!(s>0))return;try{await api("/api/relay",{r:i,pulseMs:Math.round(s*1000)});toast(t("sent"),"ok")}catch(e){toast(e.message,"bad")}}
+async function all(on){try{await api("/api/relay",{all:on})}catch(e){toast(e.message,"bad")}}
+function buildRelaySettings(){
+  const tb=$("#rset");tb.innerHTML="";
+  S.relays.items.forEach((r,i)=>{const tr=el("tr");tr.appendChild(el("td",null,"K"+(i+1)));
+    const n=el("input","in");n.dataset.k="relays.items."+i+".name";n.maxLength=19;const td1=el("td");td1.appendChild(n);tr.appendChild(td1);
+    const p=el("select","in");p.dataset.k="relays.items."+i+".powerOn";p.dataset.num="";[[0,"pRestore"],[1,"pOff"],[2,"pOn"]].forEach(([v,k])=>{const o=el("option",null,t(k));o.value=v;p.appendChild(o)});
+    const td2=el("td");td2.appendChild(p);tr.appendChild(td2);
+    const il=el("select","in");il.dataset.k="relays.items."+i+".interlock";il.dataset.num="";const o0=el("option",null,t("none"));o0.value=0;il.appendChild(o0);
+    for(let j=0;j<8;j++)if(j!==i){const o=el("option",null,"K"+(j+1));o.value=j+1;il.appendChild(o)}
+    il.onchange=()=>{const v=+il.value,items=S.relays.items;items.forEach((x,k)=>{if(x.interlock===i+1&&k!==v-1)x.interlock=0});
+      if(items[i].interlock)items[items[i].interlock-1].interlock=0;items[i].interlock=v;if(v)items[v-1].interlock=i+1;buildRelaySettings();dirty()};
+    const td3=el("td");td3.appendChild(il);tr.appendChild(td3);if(!r.fitted)tr.style.opacity=".45";tb.appendChild(tr)});
+  fill();
+}
+function buildPreset(){
+  const box=$("#presetMask");box.innerHTML="";box.classList.toggle("hide",S.link.action!==2);
+  for(let i=0;i<8;i++){if(!S.relays.items[i].fitted)continue;const b=el("button","btn sm"+((S.link.mask>>i)&1?" pri":""),"K"+(i+1)+" "+t((S.link.mask>>i)&1?"on":"off"));
+    b.onclick=()=>{S.link.mask^=1<<i;buildPreset();dirty()};box.appendChild(b)}
+}
+function buildRegs(){
+  const rows=lang==="fa"?[["Coil","0..7","رله ۱ تا ۸ (FC1/5/15)"],["Discrete","0..6","دیپ AD1..AD7 (FC2)"],["Discrete","7","کلید کانفیگ"],["Holding","0","ماسک رله‌ها (بیت ۰ = رله ۱)"],["Holding","1","۱ = همه خاموش، ۲ = شناسایی"],["Holding","2..9","پالس رله ۱ تا ۸ (×۰٫۱ ثانیه)"],["Input","0","وضعیت رله‌ها"],["Input","1","دیپ خام"],["Input","2","آدرس Slave"],["Input","3","نسخهٔ Firmware"],["Input","4..5","زمان کارکرد (ثانیه)"],["Input","6..7","فریم سالم / خطای CRC"],["Input","8..9","تعداد بوت / حالت ایمن"],["Input","10..25","دفعات کار رله‌ها (۳۲ بیتی)"]]
+  :[["Coil","0..7","Relays 1..8 (FC1/5/15)"],["Discrete","0..6","DIP AD1..AD7 (FC2)"],["Discrete","7","Config switch"],["Holding","0","Relay mask (bit 0 = relay 1)"],["Holding","1","1 = all OFF, 2 = identify"],["Holding","2..9","Pulse relay 1..8 (x0.1 s)"],["Input","0","Relay state"],["Input","1","DIP raw"],["Input","2","Slave address"],["Input","3","Firmware version"],["Input","4..5","Uptime (s)"],["Input","6..7","Good frames / CRC errors"],["Input","8..9","Boot count / safe mode"],["Input","10..25","Relay cycles (32-bit)"]];
+  const tb=$("#regs");tb.innerHTML="";for(const r of rows){const tr=el("tr");tr.appendChild(el("td",null,r[0]));const c=el("td");c.appendChild(el("code",null,r[1]));tr.appendChild(c);tr.appendChild(el("td",null,r[2]));tb.appendChild(tr)}
+}
+/* ---------- live state ---------- */
+function fmtUp(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60),x=s%60;const p=n=>String(n).padStart(2,"0");return (d?d+t("days")+" ":"")+p(h)+":"+p(m)+":"+p(x)}
+function render(){
+  if(!ST||ST.relays==null)return;
+  let on=0;
+  for(let i=0;i<8;i++){const v=(ST.relays>>i)&1;on+=v;const c=$("#rl"+i);if(c){c.classList.toggle("on",!!v);c.classList.remove("wait");const st=c.querySelector(".st");if(st)st.textContent=t(v?"on":"off");
+      const cy=c.querySelector(".cy");if(cy&&ST.cycles)cy.textContent=ST.cycles[i]}
+    const m=$("#mr"+i);if(m)m.classList.toggle("on",!!v);
+    const d=$("#dp"+i);if(d)d.classList.toggle("on",!!((ST.dip>>i)&1))}
+  $("#onc").textContent=on;$("#donc").textContent=on+" / "+((ST.fitted||0).toString(2).split("1").length-1);
+  const a=ST.dip&127;$("#dipv").textContent=a;$("#dipbin").textContent=a.toString(2).padStart(7,"0");
+  $("#dipAddr").textContent=t("dipAddress")+": "+a+(a<1||a>247?" ⚠":"");
+  $("#cfgtx").textContent=t(ST.cfg?"on":"off");$("#cfgdot").className="dot "+(ST.cfg?"warn":"ok");
+  $("#sup").textContent=fmtUp(ST.up);$("#sad").textContent=ST.addr||"—";$("#shp").textContent=Math.round(ST.heap/1024)+" KB";
+  $("#srr").textContent=ST.reset;$("#sbt").textContent=ST.boots;$("#scl").textContent=ST.clients;
+  const w=ST.wifi||{};$("#wttx").textContent=w.st==="connected"?t("connected")+" · "+w.ip+" · "+w.rssi+" dBm":t(w.st||"idle");
+  $("#wtdot").className="dot"+(w.st==="connected"?" ok":w.st==="connecting"||w.st==="retry"?" warn":"");
+  if(mtIdx>=0){const c=$("#mt"+mtIdx);if(c&&ST.mqttTest&&ST.mqttTest!=="testing"){c.textContent=ST.mqttTest==="ok"?"✓ "+t("ok"):"✗ "+ST.mqttTest;c.style.color=ST.mqttTest==="ok"?"var(--ok)":"var(--bad)"}}
+  $("#walk").textContent=ST.walk>=0?"■ "+t("walk"):t("walk");
+  const al=$("#alerts");al.innerHTML="";
+  const add=(k,c)=>al.appendChild(el("div","alert "+c,t(k)));
+  if(ST.safe)add("safe","bad");if(S&&S.system.adminDefault)add("adminDef","warn");if(ST.cfg)add("cfgStill","info");if(S&&!S.mode)add("modeNone","warn");
+  const m=$("#rsmodal");if(m){const on=ST.cfg;m.querySelector(".dot").className="dot "+(on?"warn":"ok");m.querySelector("b").textContent=t(on?"rsOn":"rsOff")}
+  if(ST.log&&ST.log.length&&!logPaused){const L=$("#log");const stick=L.scrollTop+L.clientHeight>=L.scrollHeight-20;
+    for(const [s,l,x] of ST.log){const d=el("div","l"+l);d.appendChild(el("span",null,fmtUp(s)));d.appendChild(document.createTextNode(x));L.appendChild(d)}
+    while(L.childNodes.length>400)L.firstChild.remove();if(stick)L.scrollTop=L.scrollHeight}
+}
+function info2(){
+  if(!S)return;$("#dname").textContent=S.deviceName;$("#bname").textContent=S.deviceName;
+  $("#dmode").textContent=t(S.mode===1?"modeW":S.mode===2?"modeR":"modeU");
+}
+function connectWs(){
+  if(ws)try{ws.close()}catch(e){}
+  ws=new WebSocket("ws://"+location.host+"/ws");
+  ws.onopen=()=>{ws.send(JSON.stringify({auth:token}));wsOk=true;wsUi()};
+  ws.onmessage=e=>{try{const j=JSON.parse(e.data);if(j.t==="state"){ST=j;render();info2()}}catch(x){}};
+  ws.onclose=()=>{wsOk=false;wsUi();if(token)setTimeout(connectWs,2000)};
+}
+function wsUi(){$("#wsdot").className="dot "+(wsOk?"ok":"bad");$("#wstx").textContent=t(wsOk?"live":"offline")}
+/* ---------- system ---------- */
+function modal(build){const m=$("#modal");m.innerHTML="";const bg=el("div","modal");const box=el("div","box");build(box,()=>{m.innerHTML=""});bg.appendChild(box);
+  bg.onclick=e=>{if(e.target===bg)m.innerHTML=""};m.appendChild(bg)}
+function restartDlg(){
+  modal((b,close)=>{b.id="rsmodal";b.appendChild(el("h3",null,t("rsTitle")));b.appendChild(el("p",null,t("rsText")));
+    const s=el("div","swstate");s.appendChild(el("span","dot"));s.appendChild(el("b"));b.appendChild(s);
+    const bar=el("div","bar");const go=el("button","btn pri",t("rsGo"));go.onclick=async()=>{await api("/api/action",{do:"restart"}).catch(()=>{});close();waitBack()};
+    const c=el("button","btn",t("cancel"));c.onclick=close;bar.appendChild(go);bar.appendChild(c);b.appendChild(bar);render()})
+}
+function waitBack(){toast(t("restarting"));token="";try{sessionStorage.removeItem("tk")}catch(e){}setTimeout(()=>location.reload(),9000)}
+function factoryDlg(){
+  modal((b,close)=>{b.appendChild(el("h3",null,t("facTitle")));b.appendChild(el("p",null,t("facText")));const i=el("input","in ltr");i.placeholder="RESET";b.appendChild(i);
+    const bar=el("div","bar");bar.style.marginTop="16px";const go=el("button","btn red",t("factory"));go.onclick=async()=>{try{await api("/api/action",{do:"factory",confirm:i.value});close();waitBack()}catch(e){toast(e.message,"bad")}};
+    const c=el("button","btn",t("cancel"));c.onclick=close;bar.appendChild(go);bar.appendChild(c);b.appendChild(bar)})
+}
+function ota(){
+  const f=$("#otaFile").files[0];if(!f)return;const fd=new FormData();fd.append("firmware",f,f.name);
+  const x=new XMLHttpRequest();x.open("POST","/api/ota"+($("#otaFs").checked?"?fs=1":""));x.setRequestHeader("X-Auth",token);
+  x.upload.onprogress=e=>{if(e.lengthComputable){const p=Math.round(e.loaded*100/e.total);$("#otaBar").style.width=p+"%";$("#otaTx").textContent=p+"%"}};
+  x.onload=()=>{if(x.status===200){$("#otaTx").textContent="✓";waitBack()}else{let m="";try{m=JSON.parse(x.responseText).field}catch(e){}$("#otaTx").textContent="✗ "+m;toast(t("failed")+" "+m,"bad")}};
+  x.onerror=()=>toast(t("failed"),"bad");$("#otaBtn").disabled=true;x.onloadend=()=>{$("#otaBtn").disabled=false};x.send(fd);
+}
+async function backup(){const r=await fetch("/api/backup",{headers:{"X-Auth":token}});const b=await r.blob();const a=el("a");a.href=URL.createObjectURL(b);a.download="titi-relay8-backup.json";a.click()}
+async function restoreFile(f){try{const j=JSON.parse(await f.text());await api("/api/restore",j);toast(t("saved"),"ok");S=await api("/api/settings");S0=JSON.stringify(S);applyLang()}catch(e){toast(e.field?t("invalid")+e.field:e.message,"bad")}}
+/* ---------- wiring ---------- */
+document.addEventListener("input",onInput);document.addEventListener("change",onInput);
+document.addEventListener("click",e=>{
+  const g=e.target.closest("[data-go]");if(g){go(g.dataset.go);return}
+  const a=e.target.closest("[data-all]");if(a){all(a.dataset.all==="1");return}
+  const m=e.target.closest("[data-mode]");if(m&&S){S.mode=+m.dataset.mode;modeUi();dirty();if(S.mode===1&&!$("#nets").childNodes.length)scan(true);return}
+  if(e.target.closest("[data-restart]")){restartDlg();return}
+  if(e.target.closest("[data-lang]")){lang=lang==="fa"?"en":"fa";try{localStorage.setItem("lang",lang)}catch(x){}applyLang();return}
+  const ey=e.target.closest("[data-eye]");if(ey){const i=document.getElementById(ey.dataset.eye);i.type=i.type==="password"?"text":"password"}
+});
+$("#lbtn").onclick=login;$("#lpass").addEventListener("keydown",e=>{if(e.key==="Enter")login()});
+$("#save").onclick=save;$("#discard").onclick=discard;$("#scanBtn").onclick=()=>scan(true);
+$("#wtest").onclick=async()=>{if(JSON.stringify(S)!==S0){toast(t("saveFirst"),"bad");return}await api("/api/action",{do:"wifiTest"});toast(t("testing")+"…")};
+$("#walk").onclick=()=>api("/api/action",{do:ST.walk>=0?"walkStop":"walk"});$("#ident").onclick=()=>api("/api/action",{do:"identify"});
+$("#otaBtn").onclick=ota;$("#bkBtn").onclick=backup;$("#rsFile").onchange=e=>{if(e.target.files[0])restoreFile(e.target.files[0])};$("#facBtn").onclick=factoryDlg;
+$("#caSave").onclick=async()=>{try{await api("/api/ca",{pem:$("#ca").value.trim()});toast(t("saved"),"ok");$("#caState").textContent=t($("#ca").value.trim()?"caSet":"caNone")}catch(e){toast(t("invalid")+"CA","bad")}};
+$("#logPause").onclick=()=>{logPaused=!logPaused;$("#logPause").textContent=t(logPaused?"resume":"pause")};$("#logClear").onclick=()=>{$("#log").innerHTML=""};
+window.addEventListener("beforeunload",e=>{if(S&&JSON.stringify(S)!==S0){e.preventDefault();e.returnValue=""}});
+buildNav();go("dash");applyLang();
+fetch("/api/info").then(r=>r.json()).then(j=>{info=j;$("#lname").textContent=j.name;$("#bfw").textContent="v"+j.fw+" · "+j.model;$("#dfw").textContent="FW "+j.fw;$("#dmac").textContent=j.mac;$("#fwv").textContent="v"+j.fw}).catch(()=>{});
+if(token)start();
+setInterval(()=>{if(!wsOk&&token&&!$("#app").classList.contains("hide"))api("/api/state").then(j=>{ST=j;render();info2()}).catch(()=>{})},1500);
+setInterval(()=>{if(S&&page==="conn")$("#caState").textContent=t(S.caSet?"caSet":"caNone")},2000);
+</script>
+</body>
+</html>

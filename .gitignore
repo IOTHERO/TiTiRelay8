@@ -1,0 +1,12 @@
+# Build output (arduino-cli --export-binaries, IDE exports)
+build/
+*.bin
+*.elf
+*.map
+
+# Editors
+.vscode/
+.idea/
+
+# Settings backups exported from the portal hold Wi-Fi and server passwords
+*backup*.json
