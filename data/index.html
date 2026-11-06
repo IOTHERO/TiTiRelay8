@@ -338,10 +338,13 @@ main{padding-bottom:130px}
           </div>
           <label class="tg"><span data-t="swap"></span><input type="checkbox" data-k="mb.swap"><i></i></label>
           <p class="sub" style="margin:0" data-t="swapSub"></p>
+          <label class="tg"><span data-t="wordSwap"></span><input type="checkbox" data-k="mb.wordSwap"><i></i></label>
+          <p class="sub" style="margin:0" data-t="wordSwapSub"></p>
         </div>
         <div class="card">
           <h3 data-t="regMap"></h3>
-          <table><thead><tr><th data-t="table"></th><th data-t="addrCol"></th><th data-t="meaning"></th></tr></thead><tbody id="regs"></tbody></table>
+          <div style="overflow:auto"><table><thead><tr><th data-t="table"></th><th data-t="addrCol"></th><th data-t="plcCol"></th><th data-t="accessCol"></th><th data-t="meaning"></th></tr></thead><tbody id="regs"></tbody></table></div>
+          <p class="sub" style="margin:10px 0 0" data-t="plcSub"></p>
         </div>
       </div>
 
@@ -462,7 +465,7 @@ apiUrl:"نشانی HTTP هاب (برای کلید محلی، قواعد و آپ�
 srvEnabled:"فعال",srvName:"نام",proto:"پروتکل",pPlatform:"پلتفرم TiTiSwitch",pGeneric:"MQTT عمومی",host:"آدرس سرور",port:"پورت",tls:"اتصال امن (TLS)",user:"نام کاربری",clientId:"Client ID (خالی = خودکار)",prefix:"پیشوند تاپیک",base:"تاپیک پایه",keepalive:"Keepalive (ثانیه)",qos:"QoS",test:"تست",up:"بالا",
 caTitle:"گواهی CA اختصاصی (اختیاری)",caSub:"برای سرور با گواهی داخلی. خالی = گواهی‌های عمومی داخلی دستگاه.",saveCa:"ذخیرهٔ گواهی",caSet:"گواهی ثبت شده",caNone:"گواهی داخلی",
 mbTitle:"تنظیمات Modbus RTU",addrFromDip:"آدرس از دیپ‌سوئیچ (AD1..AD7)",manualAddr:"آدرس دستی (۱ تا ۲۴۷)",baud:"سرعت (Baud)",parity:"Parity",pNone:"None",pEven:"Even",pOdd:"Odd",stopBits:"Stop bits",respDelay:"تأخیر پاسخ (ms)",swap:"جابه‌جایی RX / TX",swapSub:"اگر برد پاسخ نمی‌دهد و سیم‌کشی درست است، این را فعال کنید (TX=GPIO17، RX=GPIO16).",
-regMap:"نقشهٔ رجیسترها",table:"جدول",addrCol:"آدرس",meaning:"کاربرد",lossTitle:"قطع ارتباط",lossSub:"اگر در این مدت پیامی از سرور یا Master نرسد، این اقدام یک بار انجام می‌شود. صفر = غیرفعال.",lossTimeout:"مهلت (ثانیه)",lossAction:"اقدام",lHold:"حفظ وضعیت فعلی",lOff:"خاموش کردن همهٔ رله‌ها",lPreset:"وضعیت از پیش تعیین شده",
+regMap:"نقشهٔ رجیسترها",plcCol:"آدرس PLC",accessCol:"دسترسی",accRW:"خواندن/نوشتن",accR:"فقط خواندن",accW:"فقط نوشتن",plcSub:"«آدرس» صفرمبنا است (مثل Modbus Poll)؛ «آدرس PLC» شمارهٔ یک‌مبنای رایج در Siemens، Delta و HMIهاست.",wordSwap:"ترتیب کلمه: اول کلمهٔ پایین (Low word first)",wordSwapSub:"برای عددهای ۳۲ بیتی (زمان کارکرد، دفعات کار رله). پیش‌فرض: اول کلمهٔ بالا.",table:"جدول",addrCol:"آدرس",meaning:"کاربرد",lossTitle:"قطع ارتباط",lossSub:"اگر در این مدت پیامی از سرور یا Master نرسد، این اقدام یک بار انجام می‌شود. صفر = غیرفعال.",lossTimeout:"مهلت (ثانیه)",lossAction:"اقدام",lHold:"حفظ وضعیت فعلی",lOff:"خاموش کردن همهٔ رله‌ها",lPreset:"وضعیت از پیش تعیین شده",
 walk:"تست ترتیبی",identify:"شناسایی (چشمک LED)",onCount:"روشن",inputs:"ورودی‌ها",inputsSub:"زنده",dipAddress:"آدرس دیپ‌سوئیچ",relaySet:"تنظیمات رله‌ها",minInterval:"فاصلهٔ حداقل هر رله (ms)",stagger:"فاصلهٔ روشن شدن کویل‌ها (ms)",name:"نام",powerOn:"پس از وصل برق",interlock:"اینترلاک با",pRestore:"آخرین وضعیت",pOff:"خاموش",pOn:"روشن",none:"—",
 pulse:"پالس",sec:"ثانیه",notFitted:"رزرو (GPIO12)",cycles:"دفعات",
 general:"عمومی",devName:"نام دستگاه",newAdmin:"رمز جدید مدیر (خالی = بدون تغییر)",apPass:"رمز وای‌فای پیکربندی (خالی = بدون تغییر)",logLevel:"سطح گزارش سریال",lvE:"فقط خطا",lvW:"هشدار",lvI:"اطلاعات",lvD:"اشکال‌زدایی",
@@ -483,7 +486,7 @@ apiUrl:"Hub HTTP address (local key, rules, updates)",localEnabled:"Local contro
 srvEnabled:"Enabled",srvName:"Name",proto:"Protocol",pPlatform:"TiTiSwitch platform",pGeneric:"Generic MQTT",host:"Server address",port:"Port",tls:"Secure (TLS)",user:"Username",clientId:"Client ID (empty = automatic)",prefix:"Topic prefix",base:"Base topic",keepalive:"Keepalive (s)",qos:"QoS",test:"Test",up:"Up",
 caTitle:"Custom CA certificate (optional)",caSub:"For a server with a private certificate. Empty = the built-in public CAs.",saveCa:"Save certificate",caSet:"Certificate set",caNone:"Built-in CAs",
 mbTitle:"Modbus RTU settings",addrFromDip:"Address from DIP switch (AD1..AD7)",manualAddr:"Manual address (1..247)",baud:"Baud rate",parity:"Parity",pNone:"None",pEven:"Even",pOdd:"Odd",stopBits:"Stop bits",respDelay:"Response delay (ms)",swap:"Swap RX / TX",swapSub:"If the board does not answer and the wiring is right, turn this on (TX=GPIO17, RX=GPIO16).",
-regMap:"Register map",table:"Table",addrCol:"Address",meaning:"Meaning",lossTitle:"Link loss",lossSub:"When nothing arrives from the server or the master for this long, this action runs once. 0 = off.",lossTimeout:"Timeout (s)",lossAction:"Action",lHold:"Keep outputs",lOff:"All relays OFF",lPreset:"Preset outputs",
+regMap:"Register map",plcCol:"PLC address",accessCol:"Access",accRW:"Read/write",accR:"Read only",accW:"Write only",plcSub:"\"Address\" is 0-based (as in Modbus Poll); \"PLC address\" is the 1-based number used by Siemens, Delta and most HMIs.",wordSwap:"Word order: low word first",wordSwapSub:"For 32-bit values (uptime, relay cycles). Default: high word first.",table:"Table",addrCol:"Address",meaning:"Meaning",lossTitle:"Link loss",lossSub:"When nothing arrives from the server or the master for this long, this action runs once. 0 = off.",lossTimeout:"Timeout (s)",lossAction:"Action",lHold:"Keep outputs",lOff:"All relays OFF",lPreset:"Preset outputs",
 walk:"Walk test",identify:"Identify (blink LEDs)",onCount:"On",inputs:"Inputs",inputsSub:"live",dipAddress:"DIP address",relaySet:"Relay settings",minInterval:"Minimum interval per relay (ms)",stagger:"Coil stagger (ms)",name:"Name",powerOn:"After power-up",interlock:"Interlock with",pRestore:"Last state",pOff:"OFF",pOn:"ON",none:"—",
 pulse:"Pulse",sec:"s",notFitted:"Reserved (GPIO12)",cycles:"Cycles",
 general:"General",devName:"Device name",newAdmin:"New admin password (empty = keep)",apPass:"Config Wi-Fi password (empty = keep)",logLevel:"Serial log level",lvE:"Errors only",lvW:"Warnings",lvI:"Info",lvD:"Debug",
@@ -671,9 +674,22 @@ function buildPreset(){
     b.onclick=()=>{S.link.mask^=1<<i;buildPreset();dirty()};box.appendChild(b)}
 }
 function buildRegs(){
-  const rows=lang==="fa"?[["Coil","0..7","رله ۱ تا ۸ (FC1/5/15)"],["Discrete","0..6","دیپ AD1..AD7 (FC2)"],["Discrete","7","کلید کانفیگ"],["Holding","0","ماسک رله‌ها (بیت ۰ = رله ۱)"],["Holding","1","۱ = همه خاموش، ۲ = شناسایی"],["Holding","2..9","پالس رله ۱ تا ۸ (×۰٫۱ ثانیه)"],["Input","0","وضعیت رله‌ها"],["Input","1","دیپ خام"],["Input","2","آدرس Slave"],["Input","3","نسخهٔ Firmware"],["Input","4..5","زمان کارکرد (ثانیه)"],["Input","6..7","فریم سالم / خطای CRC"],["Input","8..9","تعداد بوت / حالت ایمن"],["Input","10..25","دفعات کار رله‌ها (۳۲ بیتی)"]]
-  :[["Coil","0..7","Relays 1..8 (FC1/5/15)"],["Discrete","0..6","DIP AD1..AD7 (FC2)"],["Discrete","7","Config switch"],["Holding","0","Relay mask (bit 0 = relay 1)"],["Holding","1","1 = all OFF, 2 = identify"],["Holding","2..9","Pulse relay 1..8 (x0.1 s)"],["Input","0","Relay state"],["Input","1","DIP raw"],["Input","2","Slave address"],["Input","3","Firmware version"],["Input","4..5","Uptime (s)"],["Input","6..7","Good frames / CRC errors"],["Input","8..9","Boot count / safe mode"],["Input","10..25","Relay cycles (32-bit)"]];
-  const tb=$("#regs");tb.innerHTML="";for(const r of rows){const tr=el("tr");tr.appendChild(el("td",null,r[0]));const c=el("td");c.appendChild(el("code",null,r[1]));tr.appendChild(c);tr.appendChild(el("td",null,r[2]));tb.appendChild(tr)}
+  // [table, first, last, access (rw|r|w), fa, en]; PLC address = table base + address + 1
+  const R=[["Coil",0,7,"rw","رله ۱ تا ۸ (FC1/5/15)","Relays 1..8 (FC1/5/15)"],
+    ["Discrete",0,6,"r","دیپ AD1..AD7 (FC2)","DIP AD1..AD7 (FC2)"],["Discrete",7,7,"r","کلید کانفیگ","Config switch"],
+    ["Holding",0,0,"rw","ماسک رله‌ها (بیت ۰ = رله ۱)","Relay mask (bit 0 = relay 1)"],["Holding",1,1,"w","۱ = همه خاموش، ۲ = شناسایی","1 = all OFF, 2 = identify"],
+    ["Holding",2,9,"w","پالس رله ۱ تا ۸ (×۰٫۱ ثانیه)","Pulse relay 1..8 (x0.1 s)"],["Holding",20,27,"rw","رله ۱ تا ۸، هر کدام یک رجیستر (۰/۱)","Relay 1..8, one register each (0/1)"],
+    ["Input",0,0,"r","وضعیت رله‌ها","Relay state"],["Input",1,3,"r","دیپ خام / آدرس Slave / نسخه","DIP raw / slave address / firmware"],
+    ["Input",4,5,"r","زمان کارکرد (۳۲ بیتی)","Uptime (32-bit)"],["Input",6,7,"r","فریم سالم / خطای CRC","Good frames / CRC errors"],
+    ["Input",8,9,"r","تعداد بوت / حالت ایمن","Boot count / safe mode"],["Input",10,25,"r","دفعات کار رله‌ها (۳۲ بیتی)","Relay cycles (32-bit)"]];
+  const base={Coil:0,Discrete:10000,Input:30000,Holding:40000};
+  const acc={rw:t("accRW"),r:t("accR"),w:t("accW")};
+  const p5=n=>String(n).padStart(5,"0");
+  const tb=$("#regs");tb.innerHTML="";
+  for(const r of R){const tr=el("tr");tr.appendChild(el("td",null,r[0]));
+    const c=el("td");c.appendChild(el("code",null,r[1]===r[2]?String(r[1]):r[1]+".."+r[2]));tr.appendChild(c);
+    const b=base[r[0]],c2=el("td");c2.appendChild(el("code",null,r[1]===r[2]?p5(b+r[1]+1):p5(b+r[1]+1)+".."+p5(b+r[2]+1)));tr.appendChild(c2);
+    tr.appendChild(el("td",null,acc[r[3]]));tr.appendChild(el("td",null,lang==="fa"?r[4]:r[5]));tb.appendChild(tr)}
 }
 /* ---------- live state ---------- */
 function fmtUp(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60),x=s%60;const p=n=>String(n).padStart(2,"0");return (d?d+t("days")+" ":"")+p(h)+":"+p(m)+":"+p(x)}

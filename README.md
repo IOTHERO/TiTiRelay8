@@ -175,29 +175,45 @@ bindings:
 Each unit then gets its device id and secret from the platform. Enter them in the portal
 (Device ID, and the server's username/password).
 
-## Modbus RTU map (0-based addresses)
+## Modbus RTU map
 
-| Table | Address | Meaning |
-|---|---|---|
-| Coils (FC1/5/15) | 0..7 | relays 1..8 |
-| Discrete inputs (FC2) | 0..6 / 7 | DIP AD1..AD7 / config switch |
-| Holding (FC3/6/16) | 0 | relay mask (bit 0 = relay 1) |
-| | 1 | write 1 = all OFF, 2 = identify |
-| | 2..9 | pulse relay 1..8, value × 0.1 s |
-| Input (FC4) | 0 | relay mask now |
-| | 1, 2, 3 | DIP raw, slave address, firmware version |
-| | 4..5 | uptime s (high, low) |
-| | 6, 7 | good frames, CRC errors |
-| | 8, 9 | boot count, safe mode |
-| | 10..25 | ON operations per relay, 32-bit (high, low) |
+"Address" is 0-based (as sent on the wire, and as Modbus Poll shows it). "PLC" is the 1-based
+number most PLC tools and HMIs use (Siemens MB_MASTER / MB_CLIENT, Delta, Schneider).
+
+| Table | Address | PLC | Access | Meaning |
+|---|---|---|---|---|
+| Coil (FC1/5/15) | 0..7 | 00001..00008 | read/write | relays 1..8 |
+| Discrete input (FC2) | 0..6 | 10001..10007 | read | DIP AD1..AD7 |
+| Discrete input | 7 | 10008 | read | config switch |
+| Holding (FC3/6/16) | 0 | 40001 | read/write | relay mask (bit 0 = relay 1) |
+| Holding | 1 | 40002 | write | 1 = all OFF, 2 = identify |
+| Holding | 2..9 | 40003..40010 | write | pulse relay 1..8, value x 0.1 s |
+| Holding | 10..19 | 40011..40020 | – | reserved (exception 02) |
+| Holding | 20..27 | 40021..40028 | read/write | relay 1..8, one register each: 0 = OFF, 1 = ON (for PLCs without coil access) |
+| Input (FC4) | 0 | 30001 | read | relay mask now |
+| Input | 1, 2, 3 | 30002..30004 | read | DIP raw, slave address, firmware version |
+| Input | 4..5 | 30005..30006 | read | uptime s (32-bit) |
+| Input | 6, 7 | 30007, 30008 | read | good frames, CRC errors |
+| Input | 8, 9 | 30009, 30010 | read | boot count, safe mode |
+| Input | 10..25 | 30011..30026 | read | ON operations per relay, 32-bit each |
+
+32-bit values are high word first by default; the portal's "low word first" switch reverses
+them for PLCs that expect that order. The product template's `modbus_rtu` binding reads uptime with
+the default order.
 
 Also FC8 sub-function 0 (echo). Broadcast (address 0) writes are carried out without a reply.
 Address 0 from the DIP switch is invalid: the board does not answer and the RUN LED shows a fault.
 
 ## Industrial behaviour
 
-- **Commands survive a power cut**: the relay state is written to NVS on every change and restored
-  per relay (last state / OFF / ON). A relay in a pulse is stored OFF.
+- **Commands survive a power cut**: the relay state is stored in NVS and restored per relay (last
+  state / OFF / ON). A state is stored once it has held 3 s, at most every 10 s, so a cycling
+  timer cannot wear the flash out. A change in the last seconds before a power cut is not
+  restored. A relay in a pulse is stored OFF.
+- **Settings survive updates**: new settings fields are only ever appended. A new firmware reads
+  the older, shorter block and gives the new fields their defaults. The production identity (device
+  id, platform server and secret, hub address) and the main Wi-Fi are also kept in separate keys.
+  If the settings block is ever unreadable, the unit still reaches the platform.
 - **Task watchdog** (8 s) on the main loop and the Modbus task. Reset reason logged.
   **3 abnormal resets in a row → safe mode**: outputs start OFF until a stable minute.
 - **Free-heap watch**: a controlled restart if it stays low for 30 s.

@@ -2,6 +2,7 @@
 #include <Preferences.h>
 #include <WiFi.h>
 #include <esp_mac.h>
+#include <stddef.h>
 #include "inputs.h"
 #include "log.h"
 
@@ -9,8 +10,56 @@ namespace settings {
 Settings cur;
 
 namespace {
-constexpr uint16_t VERSION = 2;   // bump when Settings changes layout
+constexpr uint16_t VERSION = 3;   // bump when fields are appended
 constexpr const char* NS = "cfg";
+constexpr const char* IDENT = "ident";
+// The oldest layout still read: version 2 ended with logLevel.
+constexpr size_t SIZE_V2 = offsetof(Settings, mbWordSwap);
+
+// The production identity (and the link to reach the platform) is also kept in its own keys,
+// apart from the blob: if the blob is ever unreadable the unit still reaches the platform.
+void saveIdentity(const Settings& s) {
+  Preferences p;
+  if (!p.begin(IDENT, false)) return;
+  p.putString("id", s.deviceId);
+  p.putString("api", s.apiUrl);
+  int8_t i = -1;
+  for (uint8_t k = 0; k < MAX_SERVERS; k++)
+    if (s.servers[k].enabled && s.servers[k].proto == PROTO_PLATFORM) { i = k; break; }
+  if (i >= 0) p.putBytes("srv", &s.servers[i], sizeof(ServerCfg));
+  else p.remove("srv");
+  p.putUChar("mode", s.mode);
+  p.putBytes("net", &s.nets[0], sizeof(WifiNet));
+  p.end();
+}
+
+// withLink: also the mode and the main Wi-Fi (the blob was lost, not reset on purpose).
+bool restoreIdentity(Settings& s, bool withLink) {
+  Preferences p;
+  if (!p.begin(IDENT, true)) return false;
+  bool any = false;
+  String id = p.getString("id", "");
+  if (id.length()) { strlcpy(s.deviceId, id.c_str(), sizeof s.deviceId); any = true; }
+  strlcpy(s.apiUrl, p.getString("api", "").c_str(), sizeof s.apiUrl);
+  ServerCfg v;
+  if (p.getBytesLength("srv") == sizeof v && p.getBytes("srv", &v, sizeof v) == sizeof v) {
+    v.name[sizeof v.name - 1] = v.host[sizeof v.host - 1] = v.user[sizeof v.user - 1] = 0;
+    v.pass[sizeof v.pass - 1] = v.clientId[sizeof v.clientId - 1] = v.prefix[sizeof v.prefix - 1] = 0;
+    s.servers[0] = v;
+    any = true;
+  }
+  if (withLink) {
+    WifiNet n;
+    if (p.getBytesLength("net") == sizeof n && p.getBytes("net", &n, sizeof n) == sizeof n) {
+      n.ssid[sizeof n.ssid - 1] = n.pass[sizeof n.pass - 1] = 0;
+      s.nets[0] = n;
+    }
+    uint8_t m = p.getUChar("mode", MODE_UNSET);
+    if (m <= MODE_RS485) s.mode = m;
+  }
+  p.end();
+  return any;
+}
 const uint32_t BAUDS[] = {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200};
 
 String macSuffix() {
@@ -161,22 +210,40 @@ bool validate(Settings& s, String& err) {
 void load() {
   defaults(cur);
   Preferences p;
-  if (!p.begin(NS, true)) {
-    LOGW("cfg", "no stored settings, using defaults");
-    return;
+  size_t n = 0;
+  Settings* tmp = new Settings;
+  defaults(*tmp);
+  bool ok = false;
+  if (p.begin(NS, true)) {
+    n = p.getBytesLength("s");
+    // Same or older layout: read what is stored over the defaults (fields appended later keep
+    // their defaults). A newer layout (a downgrade) is not read.
+    if (n >= SIZE_V2 && n <= sizeof(Settings)) {
+      uint16_t ver = 0;
+      ok = p.getBytes("s", tmp, n) == n;
+      ver = tmp->version;
+      ok = ok && ver >= 2 && ver <= VERSION;
+      if (ok && ver < VERSION) LOGI("cfg", "settings from version %u upgraded", ver);
+      tmp->version = VERSION;
+    }
+    p.end();
   }
-  Settings tmp;
-  size_t n = p.getBytesLength("s");
-  bool ok = n == sizeof tmp && p.getBytes("s", &tmp, sizeof tmp) == sizeof tmp &&
-            tmp.version == VERSION;
-  p.end();
   String err;
-  if (ok && validate(tmp, err)) {
-    cur = tmp;
+  if (ok && validate(*tmp, err)) {
+    cur = *tmp;
     LOGI("cfg", "settings loaded");
-  } else if (n) {
-    LOGE("cfg", "stored settings unreadable (%s), using defaults", err.length() ? err.c_str() : "layout");
+  } else {
+    // Nothing stored after a factory reset: the identity only. Unreadable: the link too.
+    bool lost = n > 0;
+    if (lost) LOGE("cfg", "stored settings unreadable (%s)", err.length() ? err.c_str() : "layout");
+    if (restoreIdentity(cur, lost)) {
+      String e2;
+      Settings check = cur;
+      if (!validate(check, e2)) { cur.mode = MODE_UNSET; }
+      LOGW("cfg", lost ? "identity and link restored from the backup keys" : "identity restored");
+    }
   }
+  delete tmp;
 }
 
 bool save(const Settings& in) {
@@ -192,6 +259,7 @@ bool save(const Settings& in) {
   p.end();
   if (ok) {
     cur = s;
+    saveIdentity(s);
     LOGI("cfg", "settings saved");
   } else {
     LOGE("cfg", "settings write failed");
@@ -201,24 +269,17 @@ bool save(const Settings& in) {
 
 void factoryReset(bool wipeIdentity) {
   Preferences p;
-  Settings* keep = new Settings;
-  defaults(*keep);
-  if (!wipeIdentity) {
-    strlcpy(keep->deviceId, cur.deviceId, sizeof keep->deviceId);
-    strlcpy(keep->apiUrl, cur.apiUrl, sizeof keep->apiUrl);
-    for (uint8_t i = 0; i < MAX_SERVERS; i++)
-      if (cur.servers[i].enabled && cur.servers[i].proto == PROTO_PLATFORM) keep->servers[i] = cur.servers[i];
-  }
   if (p.begin(NS, false)) {
     String ca = p.getString("ca", "");
-    p.clear();
-    if (!wipeIdentity) {
-      p.putBytes("s", keep, sizeof *keep);
-      if (ca.length()) p.putString("ca", ca);
-    }
+    p.clear();                                   // load() then restores the identity only
+    if (!wipeIdentity && ca.length()) p.putString("ca", ca);
     p.end();
   }
-  delete keep;
+  if (p.begin(IDENT, false)) {
+    if (wipeIdentity) p.clear();
+    else { p.remove("net"); p.remove("mode"); }  // the customer's Wi-Fi goes with the reset
+    p.end();
+  }
   for (const char* ns : {"rt", "loc", "rules", "ota"})
     if (p.begin(ns, false)) { p.clear(); p.end(); }
   if (wipeIdentity && p.begin("label", false)) { p.clear(); p.end(); }
@@ -342,6 +403,7 @@ void toJson(const Settings& s, JsonObject o, bool withSecrets) {
   m["stopBits"] = s.mbStopBits;
   m["respDelayMs"] = s.mbRespDelayMs;
   m["swap"] = s.mbSwapRxTx;
+  m["wordSwap"] = s.mbWordSwap;
   JsonObject l = o["link"].to<JsonObject>();
   l["timeoutS"] = s.linkTimeoutS;
   l["action"] = s.linkLoss;
@@ -426,6 +488,7 @@ void fromJson(Settings& s, JsonObjectConst o) {
     num(m, "stopBits", s.mbStopBits);
     num(m, "respDelayMs", s.mbRespDelayMs);
     num(m, "swap", s.mbSwapRxTx);
+    num(m, "wordSwap", s.mbWordSwap);
   }
   JsonObjectConst l = o["link"];
   if (l) {

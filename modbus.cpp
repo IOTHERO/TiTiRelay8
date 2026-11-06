@@ -10,7 +10,8 @@
 
 namespace modbus {
 namespace {
-constexpr uint8_t HOLDING_COUNT = 10;
+constexpr uint8_t HOLDING_COUNT = 28;
+constexpr uint8_t RELAY_REGS = 20;      // holding 20..27: one register per relay (0/1)
 constexpr uint8_t INPUT_COUNT = 26;
 constexpr uint8_t EX_FUNCTION = 1, EX_ADDRESS = 2, EX_VALUE = 3;
 
@@ -61,7 +62,15 @@ bool readBit(uint8_t table, uint16_t a) {
 }
 
 uint16_t holding(uint16_t a) {
-  return a == 0 ? relays::state() : 0;
+  if (a == 0) return relays::state();
+  if (a >= RELAY_REGS && a < RELAY_REGS + RELAY_COUNT) return (relays::state() >> (a - RELAY_REGS)) & 1;
+  return 0;
+}
+
+// The two registers of a 32-bit value: high word first, or low word first (mbWordSwap).
+uint16_t word32(uint32_t v, bool first) {
+  bool high = first != settings::cur.mbWordSwap;
+  return high ? v >> 16 : v & 0xFFFF;
 }
 
 uint16_t inputReg(uint16_t a) {
@@ -71,8 +80,8 @@ uint16_t inputReg(uint16_t a) {
     case 1: return inputs::raw();
     case 2: return addr;
     case 3: return FW_VER_HEX;
-    case 4: return up >> 16;
-    case 5: return up & 0xFFFF;
+    case 4: return word32(up, true);
+    case 5: return word32(up, false);
     case 6: return good & 0xFFFF;
     case 7: return crcErr & 0xFFFF;
     case 8: return health::bootCount() & 0xFFFF;
@@ -80,26 +89,31 @@ uint16_t inputReg(uint16_t a) {
   }
   if (a >= 10 && a < 26) {
     uint32_t c = relays::cycles((a - 10) / 2);
-    return ((a - 10) & 1) ? c & 0xFFFF : c >> 16;
+    return word32(c, ((a - 10) & 1) == 0);
   }
   return 0;
 }
 
-// false = illegal value
-bool writeHolding(uint16_t a, uint16_t v) {
+// 0 = done, else the Modbus exception code.
+uint8_t writeHolding(uint16_t a, uint16_t v) {
   if (a == 0) {
-    if (v > 0xFF) return false;
+    if (v > 0xFF) return EX_VALUE;
     relays::setMask(v, relays::SRC_MODBUS);
   } else if (a == 1) {
     if (v == 1) relays::allOff(relays::SRC_MODBUS, false);
     else if (v == 2) leds::identify(10000);
-    else if (v != 0) return false;
-  } else {
+    else if (v != 0) return EX_VALUE;
+  } else if (a >= 2 && a < 2 + RELAY_COUNT) {
     uint8_t r = a - 2;
     if (v) relays::set(r, true, relays::SRC_MODBUS, (uint32_t)v * 100);
     else relays::set(r, false, relays::SRC_MODBUS);
+  } else if (a >= RELAY_REGS && a < RELAY_REGS + RELAY_COUNT) {
+    if (v > 1) return EX_VALUE;
+    relays::set(a - RELAY_REGS, v == 1, relays::SRC_MODBUS);
+  } else {
+    return EX_ADDRESS;                          // 10..19 reserved
   }
-  return true;
+  return 0;
 }
 
 void handle(const uint8_t* f, uint16_t n, bool broadcast) {
@@ -147,7 +161,7 @@ void handle(const uint8_t* f, uint16_t n, bool broadcast) {
     case 6: {                                     // write single register
       uint16_t a = be16(f + 2), v = be16(f + 4);
       if (a >= HOLDING_COUNT) return broadcast ? void() : exception(fn, EX_ADDRESS);
-      if (!writeHolding(a, v)) return broadcast ? void() : exception(fn, EX_VALUE);
+      if (uint8_t ex = writeHolding(a, v)) return broadcast ? void() : exception(fn, ex);
       if (broadcast) return;
       memcpy(out, f, 6);
       return send(out, 6);
@@ -173,7 +187,7 @@ void handle(const uint8_t* f, uint16_t n, bool broadcast) {
       if (q < 1 || q > 123 || bc != q * 2) return broadcast ? void() : exception(fn, EX_VALUE);
       if (a + q > HOLDING_COUNT) return broadcast ? void() : exception(fn, EX_ADDRESS);
       for (uint16_t i = 0; i < q; i++)
-        if (!writeHolding(a + i, be16(f + 7 + i * 2))) return broadcast ? void() : exception(fn, EX_VALUE);
+        if (uint8_t ex = writeHolding(a + i, be16(f + 7 + i * 2))) return broadcast ? void() : exception(fn, ex);
       if (broadcast) return;
       memcpy(out, f, 6);
       return send(out, 6);

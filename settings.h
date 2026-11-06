@@ -32,6 +32,9 @@ struct ServerCfg {
   uint8_t qos;
 };
 
+// Stored as one blob. Layout rule: NEW FIELDS GO AT THE END ONLY. A shorter blob from an older
+// firmware is then read field by field and the new fields keep their defaults (load()), so an
+// update never loses the settings.
 struct Settings {
   uint16_t version;
   char deviceName[32];
@@ -77,6 +80,9 @@ struct Settings {
   char apPass[65];
   char adminPass[33];
   uint8_t logLevel;
+
+  // --- version 3 ---
+  bool mbWordSwap;        // 32-bit Modbus values: low word first
 };
 
 namespace settings {

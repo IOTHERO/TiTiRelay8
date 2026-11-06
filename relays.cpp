@@ -8,6 +8,12 @@
 namespace relays {
 namespace {
 constexpr uint32_t CYCLES_SAVE_MS = 10UL * 60 * 1000;
+// Flash wear: a state is stored once it has held this long, and not more often than every
+// STATE_MIN_GAP_MS. A cycling timer (1 s on / 1 s off for weeks) would otherwise write NVS tens
+// of thousands of times a day. The cost: a change in the last few seconds before a power cut
+// is not restored.
+constexpr uint32_t STATE_STABLE_MS = 3000;
+constexpr uint32_t STATE_MIN_GAP_MS = 10000;
 
 QueueHandle_t queue = nullptr;
 ResultFn resultFn = nullptr;
@@ -22,6 +28,8 @@ uint32_t cycleCount[RELAY_COUNT] = {0};
 bool cyclesDirty = false;
 uint32_t cyclesSavedAt = 0;
 uint32_t lastOnAt = 0;
+uint32_t lastAnyChange = 0;
+uint32_t lastPersist = 0;
 uint32_t changeCount = 0;
 char pendingId[RELAY_COUNT][40] = {{0}};   // command waiting for its relay to reach the target
 Preferences prefs;
@@ -42,15 +50,19 @@ void drive(uint8_t r, bool on) {
     cur &= ~(1 << r);
   }
   lastChange[r] = millis();
+  lastAnyChange = lastChange[r];
   changeCount++;
 }
 
 void persist() {
   // A relay in a pulse is stored OFF: after a power cut it must not stay on.
   uint8_t v = cur & ~pulsing();
-  if (v != persisted && prefsOk) {
+  uint32_t now = millis();
+  if (v != persisted && prefsOk && now - lastAnyChange >= STATE_STABLE_MS &&
+      (lastPersist == 0 || now - lastPersist >= STATE_MIN_GAP_MS)) {
     prefs.putUChar("st", v);
     persisted = v;
+    lastPersist = now ? now : 1;
   }
   if (cyclesDirty && prefsOk && millis() - cyclesSavedAt >= CYCLES_SAVE_MS) {
     prefs.putBytes("cyc", cycleCount, sizeof cycleCount);
@@ -272,6 +284,7 @@ const char* sourceName(uint8_t src) {
 void saveNow() {
   if (!prefsOk) return;
   prefs.putUChar("st", cur & ~pulsing());
+  persisted = cur & ~pulsing();
   prefs.putBytes("cyc", cycleCount, sizeof cycleCount);
   cyclesDirty = false;
 }
