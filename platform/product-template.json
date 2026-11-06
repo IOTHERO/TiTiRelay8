@@ -1,0 +1,312 @@
+{
+  "tags": [
+    {
+      "key": "relay_1",
+      "kind": "digital_output",
+      "display_name": {
+        "fa": "رله ۱",
+        "en": "Relay 1"
+      },
+      "data_type": "bool",
+      "access": "read_write",
+      "write_class": "command",
+      "states": {
+        "0": "OFF",
+        "1": "ON"
+      },
+      "ui": {
+        "order": 1,
+        "group": "outputs",
+        "icon": "power",
+        "chart": true
+      }
+    },
+    {
+      "key": "relay_2",
+      "kind": "digital_output",
+      "display_name": {
+        "fa": "رله ۲",
+        "en": "Relay 2"
+      },
+      "data_type": "bool",
+      "access": "read_write",
+      "write_class": "command",
+      "states": {
+        "0": "OFF",
+        "1": "ON"
+      },
+      "ui": {
+        "order": 2,
+        "group": "outputs",
+        "icon": "power",
+        "chart": true
+      }
+    },
+    {
+      "key": "relay_3",
+      "kind": "digital_output",
+      "display_name": {
+        "fa": "رله ۳",
+        "en": "Relay 3"
+      },
+      "data_type": "bool",
+      "access": "read_write",
+      "write_class": "command",
+      "states": {
+        "0": "OFF",
+        "1": "ON"
+      },
+      "ui": {
+        "order": 3,
+        "group": "outputs",
+        "icon": "power",
+        "chart": true
+      }
+    },
+    {
+      "key": "relay_4",
+      "kind": "digital_output",
+      "display_name": {
+        "fa": "رله ۴",
+        "en": "Relay 4"
+      },
+      "data_type": "bool",
+      "access": "read_write",
+      "write_class": "command",
+      "states": {
+        "0": "OFF",
+        "1": "ON"
+      },
+      "ui": {
+        "order": 4,
+        "group": "outputs",
+        "icon": "power",
+        "chart": true
+      }
+    },
+    {
+      "key": "relay_5",
+      "kind": "digital_output",
+      "display_name": {
+        "fa": "رله ۵",
+        "en": "Relay 5"
+      },
+      "data_type": "bool",
+      "access": "read_write",
+      "write_class": "command",
+      "states": {
+        "0": "OFF",
+        "1": "ON"
+      },
+      "ui": {
+        "order": 5,
+        "group": "outputs",
+        "icon": "power",
+        "chart": true
+      }
+    },
+    {
+      "key": "relay_6",
+      "kind": "digital_output",
+      "display_name": {
+        "fa": "رله ۶",
+        "en": "Relay 6"
+      },
+      "data_type": "bool",
+      "access": "read_write",
+      "write_class": "command",
+      "states": {
+        "0": "OFF",
+        "1": "ON"
+      },
+      "ui": {
+        "order": 6,
+        "group": "outputs",
+        "icon": "power",
+        "chart": true
+      }
+    },
+    {
+      "key": "relay_7",
+      "kind": "digital_output",
+      "display_name": {
+        "fa": "رله ۷",
+        "en": "Relay 7"
+      },
+      "data_type": "bool",
+      "access": "read_write",
+      "write_class": "command",
+      "states": {
+        "0": "OFF",
+        "1": "ON"
+      },
+      "ui": {
+        "order": 7,
+        "group": "outputs",
+        "icon": "power",
+        "chart": true
+      }
+    },
+    {
+      "key": "uptime_s",
+      "kind": "variable",
+      "display_name": {
+        "fa": "زمان کارکرد",
+        "en": "Uptime"
+      },
+      "data_type": "uint32",
+      "unit": "s",
+      "ui": {
+        "order": 50,
+        "chart": false,
+        "scenario": false,
+        "visible": false
+      }
+    }
+  ],
+  "bindings": {
+    "native": {
+      "connection": {
+        "transports": [
+          "mqtt"
+        ],
+        "stale_after_s": 120,
+        "command_timeout_s": 30
+      },
+      "tags": {
+        "relay_1": {},
+        "relay_2": {},
+        "relay_3": {},
+        "relay_4": {},
+        "relay_5": {},
+        "relay_6": {},
+        "relay_7": {},
+        "uptime_s": {}
+      }
+    },
+    "modbus_rtu": {
+      "connection": {
+        "baudrate": 9600,
+        "parity": "N",
+        "stopbits": 1,
+        "timeout_ms": 300,
+        "retries": 2
+      },
+      "device": {
+        "poll_interval_ms": 500
+      },
+      "tags": {
+        "relay_1": {
+          "register_type": "coil",
+          "address": 0
+        },
+        "relay_2": {
+          "register_type": "coil",
+          "address": 1
+        },
+        "relay_3": {
+          "register_type": "coil",
+          "address": 2
+        },
+        "relay_4": {
+          "register_type": "coil",
+          "address": 3
+        },
+        "relay_5": {
+          "register_type": "coil",
+          "address": 4
+        },
+        "relay_6": {
+          "register_type": "coil",
+          "address": 5
+        },
+        "relay_7": {
+          "register_type": "coil",
+          "address": 6
+        },
+        "uptime_s": {
+          "register_type": "input",
+          "address": 4
+        }
+      }
+    }
+  },
+  "commands": [
+    {
+      "key": "all_off",
+      "display_name": {
+        "fa": "خاموشی همه",
+        "en": "All off"
+      },
+      "icon": "power",
+      "params": [
+        {
+          "tag": "relay_1",
+          "value": false
+        },
+        {
+          "tag": "relay_2",
+          "value": false
+        },
+        {
+          "tag": "relay_3",
+          "value": false
+        },
+        {
+          "tag": "relay_4",
+          "value": false
+        },
+        {
+          "tag": "relay_5",
+          "value": false
+        },
+        {
+          "tag": "relay_6",
+          "value": false
+        },
+        {
+          "tag": "relay_7",
+          "value": false
+        }
+      ]
+    },
+    {
+      "key": "all_on",
+      "display_name": {
+        "fa": "روشن کردن همه",
+        "en": "All on"
+      },
+      "icon": "power",
+      "params": [
+        {
+          "tag": "relay_1",
+          "value": true
+        },
+        {
+          "tag": "relay_2",
+          "value": true
+        },
+        {
+          "tag": "relay_3",
+          "value": true
+        },
+        {
+          "tag": "relay_4",
+          "value": true
+        },
+        {
+          "tag": "relay_5",
+          "value": true
+        },
+        {
+          "tag": "relay_6",
+          "value": true
+        },
+        {
+          "tag": "relay_7",
+          "value": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 // MQTT link to the servers (tried in order, the next one after a failure).
 //
 // Platform protocol (the hub's native device contract, backend/mqtt_ingest.py):
-//   <prefix>d/<id>/telemetry  {"ts": <epoch ms>, "values": {"relay_1": true, ...}}
+//   <prefix>d/<id>/telemetry  {"ts": <epoch ms>, "values": {"relay_1": true, ..., "uptime_s": 1}}
 //   <prefix>d/<id>/state      {"state": "online" | "offline"}   (retained, also the LWT)
 //   <prefix>d/<id>/ack        {"command_id", "status": "received"|"done"|"failed", "value", "error"}
 //   <prefix>d/<id>/pairing    {}

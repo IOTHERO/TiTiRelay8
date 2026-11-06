@@ -65,7 +65,7 @@ Username = device id, password = device secret (issued by the platform for each 
 
 | Topic | Direction | Payload |
 |---|---|---|
-| `<prefix>d/<id>/telemetry` | → hub | `{"ts": <ms>, "values": {"relay_1": true, ..., "rssi": -60, "uptime_s": 123}}` on change and every N s |
+| `<prefix>d/<id>/telemetry` | → hub | `{"ts": <ms>, "values": {"relay_1": true, ..., "uptime_s": 123}}` on change and every N s |
 | `<prefix>d/<id>/state` | → hub | `{"state":"online"}`, retained; LWT `{"state":"offline"}` |
 | `<prefix>d/<id>/cmd` | hub → | `{"command_id","tag":"relay_3","value":true,"expires_at","pulse_s"}` |
 | `<prefix>d/<id>/ack` | → hub | `received` at once, then `done` (with `value`) or `failed` (`not_fitted`, `interlock`, `expired`, `busy`, `superseded`, `unknown_tag`, `bad_value`) |
@@ -78,6 +78,19 @@ platform command), `<base>/ack`.
 Reconnects follow the hub contract: the first try after 0..10 s, then doubling up to 5 min, ±20 %.
 A failed try moves to the next server. Expired commands (`expires_at`, once NTP time is known) are
 refused.
+
+## Product in the platform
+
+`platform/product-template.json` is the product template for the manufacturer panel (checked
+with the hub's `ProductTemplate` validator). It has the tags `relay_1`..`relay_7` (digital outputs,
+command write class) and `uptime_s`, plus the commands "all off" and "all on". It also has two
+bindings:
+
+- `native`: the Wi-Fi/MQTT mode (stale after 120 s);
+- `modbus_rtu`: the RS-485 mode, coils 0..6 and input register 4 (uptime), polled every 500 ms.
+
+Each unit then gets its device id and secret from the platform. Enter them in the portal
+(Device ID, and the server's username/password).
 
 ## Modbus RTU map (0-based addresses)
 

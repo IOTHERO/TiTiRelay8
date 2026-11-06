@@ -103,7 +103,6 @@ void sendTelemetry() {
     snprintf(key, sizeof key, "relay_%u", r + 1);
     v[key] = (bool)((st >> r) & 1);
   }
-  v["rssi"] = net::rssi();
   v["uptime_s"] = millis() / 1000;
   publishJson(tTelemetry, d);
   lastTelemetry = millis();
