@@ -9,7 +9,7 @@ namespace settings {
 Settings cur;
 
 namespace {
-constexpr uint16_t VERSION = 1;
+constexpr uint16_t VERSION = 2;   // bump when Settings changes layout
 constexpr const char* NS = "cfg";
 const uint32_t BAUDS[] = {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200};
 
@@ -79,6 +79,8 @@ void defaults(Settings& s) {
     v.qos = 1;
   }
   s.telemetryS = 30;
+  s.localEnabled = true;
+  s.otaEnabled = true;
   s.mbAddrFromDip = 1;
   s.mbAddr = 1;
   s.mbBaud = 9600;
@@ -125,6 +127,13 @@ bool validate(Settings& s, String& err) {
     if (!s.dhcp && ((uint32_t)s.ip == 0 || (uint32_t)s.gateway == 0)) { err = "wifi.ip"; return false; }
   }
   if (!topicSafe(s.deviceId)) { err = "deviceId"; return false; }
+  s.apiUrl[sizeof s.apiUrl - 1] = 0;
+  if (s.apiUrl[0] && strncmp(s.apiUrl, "https://", 8) != 0 && strncmp(s.apiUrl, "http://", 7) != 0) {
+    err = "apiUrl";
+    return false;
+  }
+  size_t au = strlen(s.apiUrl);
+  if (au && s.apiUrl[au - 1] == '/') s.apiUrl[au - 1] = 0;
   if (s.telemetryS < 5 || s.telemetryS > 3600) { err = "telemetryS"; return false; }
   bool baudOk = false;
   for (uint32_t b : BAUDS) baudOk |= b == s.mbBaud;
@@ -190,11 +199,54 @@ bool save(const Settings& in) {
   return ok;
 }
 
-void factoryReset() {
+void factoryReset(bool wipeIdentity) {
   Preferences p;
-  if (p.begin(NS, false)) { p.clear(); p.end(); }
-  if (p.begin("rt", false)) { p.clear(); p.end(); }
-  LOGW("cfg", "factory reset");
+  Settings* keep = new Settings;
+  defaults(*keep);
+  if (!wipeIdentity) {
+    strlcpy(keep->deviceId, cur.deviceId, sizeof keep->deviceId);
+    strlcpy(keep->apiUrl, cur.apiUrl, sizeof keep->apiUrl);
+    for (uint8_t i = 0; i < MAX_SERVERS; i++)
+      if (cur.servers[i].enabled && cur.servers[i].proto == PROTO_PLATFORM) keep->servers[i] = cur.servers[i];
+  }
+  if (p.begin(NS, false)) {
+    String ca = p.getString("ca", "");
+    p.clear();
+    if (!wipeIdentity) {
+      p.putBytes("s", keep, sizeof *keep);
+      if (ca.length()) p.putString("ca", ca);
+    }
+    p.end();
+  }
+  delete keep;
+  for (const char* ns : {"rt", "loc", "rules", "ota"})
+    if (p.begin(ns, false)) { p.clear(); p.end(); }
+  if (wipeIdentity && p.begin("label", false)) { p.clear(); p.end(); }
+  LOGW("cfg", wipeIdentity ? "erased, identity included" : "factory reset (identity kept)");
+}
+
+Label label() {
+  Label l;
+  Preferences p;
+  if (p.begin("label", true)) {
+    l.qr = p.getString("qr", "");
+    l.serial = p.getString("sn", "");
+    p.end();
+  }
+  return l;
+}
+
+bool setLabel(const String& qr, const String& serial) {
+  if (qr.length() > 200 || serial.length() > 40) return false;
+  if (qr.length() && !qr.startsWith("https://") && !qr.startsWith("http://")) return false;
+  for (char c : qr) if ((uint8_t)c < 0x21) return false;
+  Preferences p;
+  if (!p.begin("label", false)) return false;
+  if (qr.length()) p.putString("qr", qr); else p.remove("qr");
+  if (serial.length()) p.putString("sn", serial); else p.remove("sn");
+  p.end();
+  LOGI("cfg", "product label %s", qr.length() ? "stored" : "cleared");
+  return true;
 }
 
 String caPem() {
@@ -221,6 +273,17 @@ uint8_t modbusAddress() {
   if (!cur.mbAddrFromDip) return cur.mbAddr;
   uint8_t a = inputs::address();
   return a <= 247 ? a : 0;
+}
+
+int8_t platformServer() {
+  for (uint8_t i = 0; i < MAX_SERVERS; i++)
+    if (cur.servers[i].enabled && cur.servers[i].proto == PROTO_PLATFORM) return i;
+  return -1;
+}
+
+const char* deviceSecret() {
+  int8_t i = platformServer();
+  return i < 0 ? "" : cur.servers[i].pass;
 }
 
 String apSsid() { return "TiTi-R8-" + macSuffix(); }
@@ -268,6 +331,9 @@ void toJson(const Settings& s, JsonObject o, bool withSecrets) {
   }
   o["deviceId"] = s.deviceId;
   o["telemetryS"] = s.telemetryS;
+  o["apiUrl"] = s.apiUrl;
+  o["localEnabled"] = s.localEnabled;
+  o["otaEnabled"] = s.otaEnabled;
   JsonObject m = o["mb"].to<JsonObject>();
   m["fromDip"] = s.mbAddrFromDip;
   m["addr"] = s.mbAddr;
@@ -348,6 +414,9 @@ void fromJson(Settings& s, JsonObjectConst o) {
   }
   str(o, "deviceId", s.deviceId, sizeof s.deviceId);
   num(o, "telemetryS", s.telemetryS);
+  str(o, "apiUrl", s.apiUrl, sizeof s.apiUrl);
+  num(o, "localEnabled", s.localEnabled);
+  num(o, "otaEnabled", s.otaEnabled);
   JsonObjectConst m = o["mb"];
   if (m) {
     num(m, "fromDip", s.mbAddrFromDip);

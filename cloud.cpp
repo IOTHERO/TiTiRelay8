@@ -3,6 +3,9 @@
 #include <esp_crt_bundle.h>
 #include <mqtt_client.h>
 #include "health.h"
+#include "hubapi.h"
+#include "local.h"
+#include "rules.h"
 #include "inputs.h"
 #include "leds.h"
 #include "log.h"
@@ -16,7 +19,8 @@ constexpr uint32_t CONNECT_TIMEOUT_MS = 15000;
 constexpr uint32_t FIRST_DELAY_MAX_MS = 10000;   // hub contract: first retry 0..10 s,
 constexpr uint32_t DELAY_CAP_MS = 300000;        // doubling up to 5 min, +-20 %,
 constexpr uint32_t STABLE_MS = 60000;            // reset after a 60 s session
-constexpr uint32_t TELEMETRY_MIN_GAP_MS = 100;
+constexpr uint32_t TELEMETRY_MIN_GAP_MS = 250;     // hub drops > 5 messages/s per device
+constexpr uint8_t SEEN_IDS = 24;                   // a command id is carried out only once
 
 enum State : uint8_t { IDLE, WAIT, CONNECTING, UP };
 State state = IDLE;
@@ -39,7 +43,8 @@ bool caLoaded = false;
 int8_t testIdx = -1;
 String testText;
 
-char tTelemetry[128], tState[128], tAck[128], tPairing[128], tCmd[128];
+char tBase[112], tTelemetry[128], tState[128], tAck[128], tPairing[128], tCmd[128];
+char tConfig[128], tRules[128], tOta[128];
 char clientId[64];
 bool generic = false;
 uint8_t qos = 1;
@@ -49,24 +54,38 @@ const ServerCfg& server() { return settings::cur.servers[srv]; }
 void buildTopics() {
   const ServerCfg& v = server();
   generic = v.proto == PROTO_GENERIC;
-  char base[112];
+  char* base = tBase;
   if (generic) {
-    snprintf(base, sizeof base, "%s/", v.prefix);
+    snprintf(tBase, sizeof tBase, "%s/", v.prefix);
   } else {
-    snprintf(base, sizeof base, "%sd/%s/", v.prefix, settings::cur.deviceId);
+    snprintf(tBase, sizeof tBase, "%sd/%s/", v.prefix, settings::cur.deviceId);
   }
   snprintf(tTelemetry, sizeof tTelemetry, "%stelemetry", base);
   snprintf(tState, sizeof tState, "%s%s", base, generic ? "status" : "state");
   snprintf(tAck, sizeof tAck, "%sack", base);
   snprintf(tPairing, sizeof tPairing, "%spairing", base);
   snprintf(tCmd, sizeof tCmd, "%scmd", base);
+  snprintf(tConfig, sizeof tConfig, "%sconfig", base);
+  snprintf(tRules, sizeof tRules, "%srules", base);
+  snprintf(tOta, sizeof tOta, "%sota", base);
   if (v.clientId[0]) strlcpy(clientId, v.clientId, sizeof clientId);
   else strlcpy(clientId, settings::defaultClientId().c_str(), sizeof clientId);
   qos = v.qos;
 }
 
 const char* offlineMsg() { return generic ? "offline" : "{\"state\":\"offline\"}"; }
-const char* onlineMsg() { return generic ? "online" : "{\"state\":\"online\"}"; }
+// Platform: the firmware version and, for local control, the private address on the home Wi-Fi.
+String onlineMsg() {
+  if (generic) return "online";
+  JsonDocument d;
+  d["state"] = "online";
+  d["firmware"] = FW_VERSION;
+  String a = settings::cur.localEnabled ? local::addr() : String();
+  if (a.length()) d["local_addr"] = a;
+  String s;
+  serializeJson(d, s);
+  return s;
+}
 
 void publish(const char* topic, const char* payload, int q, bool retain) {
   if (!client || state != UP) return;
@@ -77,9 +96,9 @@ void publish(const char* topic, const char* payload, int q, bool retain) {
 }
 
 void publishJson(const char* topic, JsonDocument& doc) {
-  char buf[512];
-  size_t n = serializeJson(doc, buf, sizeof buf);
-  if (n < sizeof buf) publish(topic, buf, qos, false);
+  String s;
+  serializeJson(doc, s);
+  publish(topic, s.c_str(), qos, false);
 }
 
 void sendAck(const char* id, const char* status, int relay, bool value, const char* error) {
@@ -106,6 +125,31 @@ void sendTelemetry() {
   v["uptime_s"] = millis() / 1000;
   publishJson(tTelemetry, d);
   lastTelemetry = millis();
+}
+
+// Command ids already seen and how they ended (0 received, 1 done, 2 failed).
+struct Seen { char id[40]; uint8_t status; int8_t relay; bool value; };
+Seen seen[SEEN_IDS] = {};
+uint8_t seenNext = 0;
+portMUX_TYPE seenMux = portMUX_INITIALIZER_UNLOCKED;
+
+int findSeen(const char* id) {
+  for (uint8_t i = 0; i < SEEN_IDS; i++) if (seen[i].id[0] && !strcmp(seen[i].id, id)) return i;
+  return -1;
+}
+
+void remember(const char* id, uint8_t status, int8_t relay, bool value) {
+  portENTER_CRITICAL(&seenMux);
+  int i = findSeen(id);
+  if (i < 0) {
+    i = seenNext;
+    seenNext = (seenNext + 1) % SEEN_IDS;
+    strlcpy(seen[i].id, id, sizeof seen[i].id);
+  }
+  seen[i].status = status;
+  seen[i].relay = relay;
+  seen[i].value = value;
+  portEXIT_CRITICAL(&seenMux);
 }
 
 // "2026-10-27T10:00:00Z", "...00.123+03:30" -> epoch seconds; 0 if it cannot be read.
@@ -158,18 +202,35 @@ void onCommand(const char* data, int len) {
   JsonObjectConst o = d.as<JsonObjectConst>();
   if (o["type"].is<const char*>()) return;       // rules / config: not used by this module
   const char* id = o["command_id"] | "";
+  if (*id) {
+    int i = findSeen(id);
+    if (i >= 0) {                                   // redelivered (QoS 1): answer, do not repeat
+      Seen x = seen[i];
+      static const char* names[] = {"received", "done", "failed"};
+      sendAck(id, names[x.status], x.status == 1 ? x.relay : -1, x.value,
+              x.status == 2 ? "failed" : nullptr);
+      LOGD("mqtt", "command repeated, not carried out again");
+      return;
+    }
+  }
   if (*id || o["tag"].is<const char*>()) {
     int r = relayFromTag(o["tag"]);
     int v = boolValue(o["value"]);
     if (r < 0 || v < 0) {
-      if (*id) sendAck(id, "failed", -1, false, r < 0 ? "unknown_tag" : "bad_value");
+      if (*id) {
+        remember(id, 2, -1, false);
+        sendAck(id, "failed", -1, false, r < 0 ? "unknown_tag" : "bad_value");
+      }
       LOGW("mqtt", "command refused: %s", r < 0 ? "unknown tag" : "bad value");
       return;
     }
     if (o["expires_at"].is<const char*>() && net::timeValid()) {
       int64_t exp = parseIso(o["expires_at"]);
       if (exp && exp < (int64_t)time(nullptr)) {
-        if (*id) sendAck(id, "failed", r, (relays::state() >> r) & 1, "expired");
+        if (*id) {
+          remember(id, 2, r, false);
+          sendAck(id, "failed", r, (relays::state() >> r) & 1, "expired");
+        }
         LOGW("mqtt", "command for relay %d expired, not executed", r + 1);
         return;
       }
@@ -186,7 +247,10 @@ void onCommand(const char* data, int len) {
       if (*id) sendAck(id, "failed", r, (relays::state() >> r) & 1, "busy");
       return;
     }
-    if (*id) sendAck(id, "received", -1, false, nullptr);
+    if (*id) {
+      remember(id, 0, r, v);
+      sendAck(id, "received", -1, false, nullptr);
+    }
     return;
   }
   // Generic form: {"relay_1": true, "relay_3": false} or {"mask": 5}
@@ -203,11 +267,20 @@ void onCommand(const char* data, int len) {
   if (!n) LOGW("mqtt", "command without a known relay key");
 }
 
+bool topicIs(esp_mqtt_event_handle_t e, const char* t) {
+  return e->topic_len == (int)strlen(t) && !strncmp(e->topic, t, e->topic_len);
+}
+
 void onEvent(void*, esp_event_base_t, int32_t id, void* data) {
   auto* e = static_cast<esp_mqtt_event_handle_t>(data);
   switch ((esp_mqtt_event_id_t)id) {
     case MQTT_EVENT_CONNECTED:
       esp_mqtt_client_subscribe(e->client, tCmd, qos);
+      if (!generic) {
+        esp_mqtt_client_subscribe(e->client, tConfig, 1);
+        esp_mqtt_client_subscribe(e->client, tRules, 1);
+        esp_mqtt_client_subscribe(e->client, tOta, 1);
+      }
       evConnected = true;
       break;
     case MQTT_EVENT_DISCONNECTED:
@@ -239,8 +312,16 @@ void onEvent(void*, esp_event_base_t, int32_t id, void* data) {
         LOGW("mqtt", "message too large, ignored");
         break;
       }
-      if (e->topic_len == (int)strlen(tCmd) && !strncmp(e->topic, tCmd, e->topic_len))
+      if (topicIs(e, tCmd)) {
         onCommand(e->data, e->data_len);
+      } else if (topicIs(e, tRules)) {
+        rules::apply(e->data, e->data_len);
+      } else if (topicIs(e, tConfig) || topicIs(e, tOta)) {
+        JsonDocument d;
+        if (deserializeJson(d, e->data, e->data_len)) break;
+        if (topicIs(e, tOta)) hubapi::offerOta(d.as<JsonObjectConst>());
+        else if (d["local"].is<JsonObjectConst>()) local::applyConfig(d["local"]);
+      }
       break;
     default:
       break;
@@ -318,7 +399,8 @@ void startClient() {
   cfg.session.last_will.retain = 1;
   cfg.network.disable_auto_reconnect = true;
   cfg.network.timeout_ms = 10000;
-  cfg.buffer.size = 2048;
+  cfg.buffer.size = 12288;             // a rules message can be several KB
+  cfg.buffer.out_size = 2048;
   cfg.task.stack_size = 6144;
   client = esp_mqtt_client_init(&cfg);
   if (!client) {
@@ -389,9 +471,14 @@ void loop() {
           state = IDLE;
           return;
         }
-        publish(tState, onlineMsg(), 1, true);
+        publish(tState, onlineMsg().c_str(), 1, true);
         sendTelemetry();
         lastChanges = relays::changes();
+        if (!generic) {
+          hubapi::reportPendingOta();
+          hubapi::fetchAll();            // local key and rules after every start / reconnect
+          local::flushLog();
+        }
       } else if (evDown || now - startedAt > CONNECT_TIMEOUT_MS) {
         if (!evDown) strlcpy(err, "timeout", sizeof err);
         scheduleRetry(false);
@@ -449,6 +536,18 @@ String testResult() { return testText; }
 
 // Acks for commands carried out by the main loop.
 void ackResult(const char* id, bool ok, uint8_t relay, bool value, const char* error) {
+  remember(id, ok ? 1 : 2, relay, value);
   sendAck(id, ok ? "done" : "failed", relay, value, error);
+}
+
+bool publishKind(const char* kind, JsonDocument& doc) {
+  if (state != UP || generic || !client) return false;
+  char topic[160];
+  snprintf(topic, sizeof topic, "%s%s", tBase, kind);
+  String s;
+  serializeJson(doc, s);
+  bool ok = esp_mqtt_client_publish(client, topic, s.c_str(), 0, 1, false) >= 0;
+  if (ok) leds::data();
+  return ok;
 }
 }  // namespace cloud

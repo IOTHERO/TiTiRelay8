@@ -265,8 +265,8 @@ uint32_t cycles(uint8_t relay) { return relay < RELAY_COUNT ? cycleCount[relay] 
 uint32_t changes() { return changeCount; }
 
 const char* sourceName(uint8_t src) {
-  static const char* names[] = {"boot", "web", "mqtt", "modbus", "link-loss", "system"};
-  return src < 6 ? names[src] : "?";
+  static const char* names[] = {"boot", "web", "mqtt", "modbus", "link-loss", "system", "local", "rule"};
+  return src < sizeof names / sizeof names[0] ? names[src] : "?";
 }
 
 void saveNow() {

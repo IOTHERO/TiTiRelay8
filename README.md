@@ -24,6 +24,54 @@ behind a central hub or a PLC.
 
 The serial log runs at 115200 baud.
 
+## Production line
+
+The maker panel exports the labels CSV of a batch with credentials
+(`identifier, serial_number, claim_code, qr, device_id, device_secret`). One row belongs to one
+unit: its platform identity and the QR printed on its label.
+
+**Script** (`pip install pyserial`): it takes the next unused row for each unit you plug in,
+programs it and records it in `<csv>.done`, so a row is never used twice:
+
+```
+python tools/program_units.py --csv labels.csv --port COM5 --server mqtt.example.com:8883 --tls --api https://hub.example.com
+```
+
+The CSV holds every unit's secret. Keep it off shared drives, and delete it when the batch is
+done (it is in `.gitignore`).
+
+**Serial console** by hand, at 115200 baud, one command per line (secrets and the claim code are
+never printed back):
+
+```
+id d0123456789abcdefghij
+secret <device secret>
+server mqtt.example.com 8883 tls
+api https://hub.example.com
+wifi MyNetwork MyPassword
+mode wifi
+save
+restart
+```
+
+Then `qr <label link>` and `serial <serial number>` store the product label. `show` prints the
+settings. `factory yes` restores the factory settings and keeps the identity and the label.
+`wipe yes` erases everything.
+
+## Product label (QR) in the portal
+
+System page → **Product label**: the same QR as on the sticker, plus the serial number, the
+identifier and the claim code (hidden until "Show code"), and a print button. The QR is drawn in
+the browser by `data/static/qr.js` (a copy of the hub's `maker/js/qr.js`); the module only stores
+the link (NVS, about 80 bytes). The claim code works once, for the first registration. The
+sticker stays the main copy; this is the spare when it is lost or unreadable. Only someone
+with the config switch and the admin password can see it.
+
+**Lost admin password:** in the config portal, turn the config switch OFF and ON again 5 times
+within 15 s. The module returns to factory settings. A factory reset (from here, the portal or the
+console) keeps the production identity (device id, platform server and secret, hub address, CA)
+and the label, so the unit still reaches the platform afterwards.
+
 ## Pins (from the schematic)
 
 | Function | GPIO |
@@ -66,10 +114,45 @@ Username = device id, password = device secret (issued by the platform for each 
 | Topic | Direction | Payload |
 |---|---|---|
 | `<prefix>d/<id>/telemetry` | → hub | `{"ts": <ms>, "values": {"relay_1": true, ..., "uptime_s": 123}}` on change and every N s |
-| `<prefix>d/<id>/state` | → hub | `{"state":"online"}`, retained; LWT `{"state":"offline"}` |
+| `<prefix>d/<id>/state` | → hub | `{"state":"online","firmware":"1.0.0","local_addr":"192.168.1.50"}`, retained; LWT `{"state":"offline"}` |
 | `<prefix>d/<id>/cmd` | hub → | `{"command_id","tag":"relay_3","value":true,"expires_at","pulse_s"}` |
 | `<prefix>d/<id>/ack` | → hub | `received` at once, then `done` (with `value`) or `failed` (`not_fitted`, `interlock`, `expired`, `busy`, `superseded`, `unknown_tag`, `bad_value`) |
 | `<prefix>d/<id>/pairing` | → hub | `{}` |
+| `<prefix>d/<id>/config` | hub → | `{"type":"config","local":{"enabled","key","version","port"}}`: the local-control key |
+| `<prefix>d/<id>/rules` | hub → | rules to run while cut off from the server |
+| `<prefix>d/<id>/ota` | hub → | firmware offer `{job_id, version, sha256, size, url}` |
+| `<prefix>d/<id>/ota/status` | → hub | `downloading`, `installed` (after the restart, by the new firmware), `failed` |
+| `<prefix>d/<id>/local_log` | → hub | `{"entries":[{"at","tag","value","by"}]}`: what was switched without the server |
+
+A command id is carried out once. A redelivered command (MQTT QoS 1) is only answered again.
+Messages are kept to at most 4 per second (the hub drops more than 5).
+
+**Hub address** (`apiUrl`, for example `https://hub.example.com`): after every connection the
+module fetches `GET /ingest/v1/devices/<id>/config` and `/rules`, and it downloads firmware from
+it. Requests carry `Authorization: Bearer <device secret>`.
+
+### Local control (internet down, home Wi-Fi up)
+
+The module serves the app's signed requests on port 8080 (`/local/v1/info`, `/nonce`, `/command`,
+`/state`), as in `hub/platform/local_sign.py`. A nonce works once and for 30 s (16 open at most).
+The signature is HMAC-SHA256 with the key the hub sends. The module announces itself over mDNS as
+`_titiswitch._tcp` (TXT `id=<device_id>`) and puts `local_addr` in its state. Every local switch
+is reported in `local_log` (at once when connected, otherwise after reconnecting).
+
+### Offline rules
+
+The module keeps the last rules message in flash. It runs the rules only after the server has been
+unreachable for `offline_after_s` (60 s), so nothing runs twice. Supported: triggers `time`,
+`interval` and `value` (with `for_s`), conditions and `window`, actions `write` and `delay`.
+Calendar fields use Jalali days (weekday 0 = Saturday), months, month days, start/end and holidays,
+as on the server. The clock comes from NTP, else from the rules' `server_time`. What a rule did is
+reported in `local_log` (`by: "rule:<id>"`).
+
+### Firmware from the platform
+
+On an offer the module downloads the image from the hub. It checks the size and SHA-256, writes
+it and restarts. The new firmware reports `installed` (or `failed` if the old one is still
+running). Offers can be turned off in the portal.
 
 Generic MQTT (for example the hub's `mqtt_json` driver): `<base>/telemetry` (same JSON),
 `<base>/status` (`online`/`offline`), `<base>/cmd` (`{"relay_1": true}`, `{"mask": 5}` or the
@@ -141,7 +224,20 @@ Address 0 from the DIP switch is invalid: the board does not answer and the RUN 
 
 DATA flashes on every message or frame. Identify flashes both LEDs.
 
-## Not included yet
+## Not included
 
-Local rules while offline (`d/<id>/rules`), signed local control over the home network, and
-firmware offers from the platform (`d/<id>/ota`). Updates are done from the portal.
+- HTTP and TCP transports of the device contract: MQTT only (the platform broker with the hub's
+  authentication hooks is required).
+- Signed SMS: the board has no GSM modem.
+- Offline rules: security scenarios / sirens, and the `sun`, `once`, `offline` and `presence`
+  triggers (the server does not send those to a module either).
+- Automatic rollback when a new firmware does not start (needs the bootloader's rollback option).
+
+## Hardware notes
+
+- RS-485: the 120 Ω terminator (R52) and the 1 k bias resistors (R50/R51) are on every board. With
+  several modules on one bus, fit them with jumpers and close them only at the two ends.
+- Fit either the MAX485 or the ADM2682E, not both.
+- The module reports the commanded relay state. It has no contact feedback and does not measure the
+  24 V coil supply. A divider from +VREL to a free ADC pin would show a lost coil supply.
+- No battery-backed RTC: offline time rules need the time from NTP or from the server first.

@@ -6,7 +6,7 @@
 #include "board.h"
 
 namespace relays {
-enum Source : uint8_t { SRC_BOOT, SRC_WEB, SRC_MQTT, SRC_MODBUS, SRC_LINK, SRC_SYSTEM };
+enum Source : uint8_t { SRC_BOOT, SRC_WEB, SRC_MQTT, SRC_MODBUS, SRC_LINK, SRC_SYSTEM, SRC_LOCAL, SRC_RULE };
 enum Op : uint8_t { OP_SET, OP_MASK, OP_ALL_OFF };
 
 struct Cmd {

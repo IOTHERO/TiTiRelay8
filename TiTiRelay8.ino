@@ -15,11 +15,15 @@
 #include "inputs.h"
 #include "leds.h"
 #include "cloud.h"
+#include "console.h"
+#include "hubapi.h"
+#include "local.h"
 #include "log.h"
 #include "modbus.h"
 #include "net.h"
 #include "portal.h"
 #include "relays.h"
+#include "rules.h"
 #include "settings.h"
 
 namespace {
@@ -28,6 +32,9 @@ RunMode runMode = RUN_PORTAL;
 bool lossApplied = false;
 uint32_t cfgOnSince = 0;
 bool pairingSent = false;
+uint8_t cfgToggles = 0;
+uint32_t cfgToggleStart = 0;
+bool cfgLast = false;
 
 void banner() {
   Serial.println();
@@ -93,6 +100,23 @@ void pairingCheck(uint32_t now) {
     LOGI("main", "config switch ON: turn it OFF again; power-cycle with it ON for the portal");
   }
 }
+// Config portal: the config switch turned OFF and ON again 5 times within 15 s = factory reset
+// (the way back when the admin password is lost).
+void factoryGesture(uint32_t now) {
+  bool on = inputs::configOn();
+  if (on == cfgLast) return;
+  cfgLast = on;
+  if (!on) return;
+  if (!cfgToggles || now - cfgToggleStart > 15000) { cfgToggles = 0; cfgToggleStart = now; }
+  if (++cfgToggles >= 5) {
+    LOGW("main", "config switch toggled 5 times: factory reset");
+    leds::identify(3000);
+    settings::factoryReset();
+    health::restart("factory reset with the config switch");
+  } else if (cfgToggles >= 3) {
+    LOGW("main", "factory reset in %u more toggles of the config switch", 5 - cfgToggles);
+  }
+}
 }  // namespace
 
 void setup() {
@@ -105,7 +129,10 @@ void setup() {
   banner();
   relays::onResult(cloud::ackResult);
   relays::begin(health::safeMode());
+  local::begin();
+  rules::begin();
   health::watchThisTask();
+  cfgLast = inputs::configOn();
 
   if (inputs::configAtBoot() || settings::cur.mode == MODE_UNSET) {
     if (!inputs::configAtBoot()) LOGW("main", "not configured yet: starting the config portal");
@@ -114,6 +141,7 @@ void setup() {
   } else if (settings::cur.mode == MODE_WIFI) {
     runMode = RUN_WIFI;
     net::begin(false);
+    hubapi::begin();
     cloud::begin();
   } else {
     runMode = RUN_RS485;
@@ -131,13 +159,17 @@ void loop() {
   leds::loop();
   health::loop();
   logx::flushRepeats();
+  console::loop();
   switch (runMode) {
     case RUN_PORTAL:
       portal::loop();
+      factoryGesture(now);
       break;
     case RUN_WIFI:
       net::loop();
       cloud::loop();
+      local::loop();
+      rules::loop(cloud::connected());
       linkLossCheck(now);
       pairingCheck(now);
       runLed(now);

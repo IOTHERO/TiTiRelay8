@@ -151,6 +151,15 @@ code{font-family:Consolas,monospace;font-size:12px;background:rgba(255,255,255,.
 .log span{color:#4d566a;margin-right:8px}
 .prog{height:8px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:12px}
 .prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold),var(--gold2));transition:width .2s}
+/* product label */
+.lbl{display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center}
+.qrbox{background:#fff;border-radius:16px;padding:10px;box-shadow:0 0 0 1px rgba(217,180,106,.35),0 10px 30px rgba(0,0,0,.4);line-height:0}
+.qrbox svg{display:block}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px}
+.kv span{color:var(--mut)}.kv b{direction:ltr;text-align:start;font-family:Consolas,monospace;font-weight:600;word-break:break-all}
+@media(max-width:560px){.lbl{grid-template-columns:1fr;justify-items:center}}
+@media print{body *{visibility:hidden!important}#labelCard,#labelCard *{visibility:visible!important}
+#labelCard{position:absolute;left:0;top:0;background:#fff;color:#000;border:0}#labelCard .bar,#labelCard details,#labelCard .sub{display:none!important}}
 /* save bar */
 .savebar{position:fixed;bottom:18px;left:50%;transform:translate(-50%,140%);display:flex;align-items:center;gap:14px;padding:10px 12px 10px 18px;border-radius:18px;
 background:rgba(20,22,30,.92);border:1px solid rgba(217,180,106,.35);box-shadow:var(--sh);backdrop-filter:blur(14px);transition:.4s cubic-bezier(.3,1.4,.5,1);z-index:30;visibility:hidden}
@@ -255,6 +264,8 @@ main{padding-bottom:130px}
         <div class="card stat"><div class="k" data-t="resetReason"></div><div class="v" id="srr" style="font-size:16px">-</div></div>
         <div class="card stat"><div class="k" data-t="boots"></div><div class="v" id="sbt">-</div></div>
         <div class="card stat"><div class="k" data-t="apClients"></div><div class="v" id="scl">-</div></div>
+        <div class="card stat"><div class="k" data-t="localCtl"></div><div class="v" id="slk" style="font-size:16px">-</div></div>
+        <div class="card stat"><div class="k" data-t="offRules"></div><div class="v" id="srl" style="font-size:16px">-</div></div>
       </div>
     </section>
 
@@ -299,6 +310,9 @@ main{padding-bottom:130px}
             <label class="f"><span data-t="deviceId"></span><input class="in ltr" data-k="deviceId" maxlength="31"></label>
             <label class="f"><span data-t="telemetryS"></span><input class="in ltr" type="number" min="5" max="3600" data-k="telemetryS"></label>
           </div>
+          <label class="f"><span data-t="apiUrl"></span><input class="in ltr" data-k="apiUrl" maxlength="95" placeholder="https://hub.example.com"></label>
+          <label class="tg"><span data-t="localEnabled"></span><input type="checkbox" data-k="localEnabled"><i></i></label>
+          <label class="tg"><span data-t="otaEnabled"></span><input type="checkbox" data-k="otaEnabled"><i></i></label>
           <div id="srvs"></div>
           <details><summary style="cursor:pointer;color:var(--mut)" data-t="caTitle"></summary>
             <p class="sub" style="margin:8px 0" data-t="caSub"></p>
@@ -374,6 +388,30 @@ main{padding-bottom:130px}
 
     <!-- SYSTEM -->
     <section class="page" id="p-sys">
+      <div class="card" id="labelCard" style="margin-bottom:16px">
+        <h3><span data-t="label"></span><small id="lblHint"></small></h3>
+        <p class="sub" data-t="labelSub"></p>
+        <div class="lbl">
+          <div class="qrbox hide" id="qrBox"></div>
+          <div>
+            <div class="kv">
+              <span data-t="serialNo"></span><b id="lblSn">—</b>
+              <span data-t="identifier"></span><b id="lblId">—</b>
+              <span data-t="claimCode"></span><b id="lblCode">—</b>
+            </div>
+            <div class="alert info hide" id="lblNone" style="margin-top:14px" data-t="labelNone"></div>
+            <div class="bar" style="margin-top:14px">
+              <button class="btn sm" id="lblShow" data-t="showCode"></button>
+              <button class="btn sm" id="lblPrint" data-t="printLabel"></button>
+            </div>
+          </div>
+        </div>
+        <details style="margin-top:16px"><summary style="cursor:pointer;color:var(--mut)" data-t="labelEdit"></summary>
+          <label class="f" style="margin-top:10px"><span>QR</span><input class="in ltr" id="lblQrIn" maxlength="200" placeholder="https://…/#/claim/…/…"></label>
+          <label class="f"><span data-t="serialNo"></span><input class="in ltr" id="lblSnIn" maxlength="40"></label>
+          <button class="btn sm pri" id="lblSave" data-t="save"></button>
+        </details>
+      </div>
       <div class="grid g2">
         <div class="card">
           <h3 data-t="general"></h3>
@@ -419,7 +457,8 @@ dash:"داشبورد",conn:"ارتباط",relays:"رله‌ها و تست",sys:"
 device:"دستگاه",outputs:"خروجی‌ها",allOn:"همه روشن",allOff:"همه خاموش",openTest:"صفحهٔ تست",uptime:"زمان کارکرد",address:"آدرس مدباس",heap:"حافظهٔ آزاد",resetReason:"علت آخرین ریست",boots:"تعداد روشن شدن",apClients:"کاربران متصل",
 mWifi:"وای‌فای / MQTT",mWifiSub:"اتصال مستقیم به سرور پلتفرم از طریق شبکهٔ وای‌فای",mRs:"RS-485 / Modbus RTU",mRsSub:"اتصال به هاب مرکزی یا PLC روی باس RS-485",chooseMode:"ابتدا نوع ارتباط را انتخاب کنید.",
 wifiNet:"شبکهٔ وای‌فای",scan:"جستجو",scanning:"در حال جستجو…",noNets:"شبکه‌ای پیدا نشد",ssid:"نام شبکه (SSID)",password:"رمز",savedPass:"•••••• (ذخیره شده — برای تغییر بنویسید)",backupNet:"شبکهٔ پشتیبان (اختیاری)",dhcp:"دریافت خودکار IP (DHCP)",gateway:"گیت‌وی",subnet:"Subnet",hostname:"نام میزبان",ntp:"سرور زمان (NTP)",
-testWifi:"تست اتصال وای‌فای",servers:"سرورها",serversSub:"به ترتیب امتحان می‌شوند؛ اگر یکی در دسترس نباشد سراغ بعدی می‌رود.",deviceId:"شناسهٔ دستگاه (Device ID)",telemetryS:"دورهٔ ارسال وضعیت (ثانیه)",
+testWifi:"تست اتصال وای‌فای",servers:"سرورها",serversSub:"به ترتیب امتحان می‌شوند؛ اگر یکی در دسترس نباشد سراغ بعدی می‌رود.",label:"برچسب محصول",labelSub:"همان QR که روی محصول چسبانده شده؛ مشتری با اسکن آن دستگاه را به حساب خود اضافه می‌کند. کد فعال‌سازی فقط یک بار و فقط برای اولین ثبت معتبر است.",serialNo:"شمارهٔ سریال",identifier:"شناسهٔ محصول",claimCode:"کد فعال‌سازی",showCode:"نمایش کد",hideCode:"پنهان کردن کد",printLabel:"چاپ برچسب",labelEdit:"ثبت یا تغییر برچسب (از فایل CSV سامانهٔ تولید)",labelNone:"برچسبی روی این دستگاه ثبت نشده است. در خط تولید با کنسول سریال (qr و serial) یا از همین‌جا ثبت کنید.",firstUse:"فقط برای اولین فعال‌سازی",
+apiUrl:"نشانی HTTP هاب (برای کلید محلی، قواعد و آپدیت)",localEnabled:"کنترل محلی از وای‌فای خانه (وقتی اینترنت قطع است)",otaEnabled:"پذیرش آپدیت Firmware از پلتفرم",localCtl:"کنترل محلی",offRules:"قواعد آفلاین",keyOk:"کلید دریافت شده",keyNone:"بدون کلید",deviceId:"شناسهٔ دستگاه (Device ID)",telemetryS:"دورهٔ ارسال وضعیت (ثانیه)",
 srvEnabled:"فعال",srvName:"نام",proto:"پروتکل",pPlatform:"پلتفرم TiTiSwitch",pGeneric:"MQTT عمومی",host:"آدرس سرور",port:"پورت",tls:"اتصال امن (TLS)",user:"نام کاربری",clientId:"Client ID (خالی = خودکار)",prefix:"پیشوند تاپیک",base:"تاپیک پایه",keepalive:"Keepalive (ثانیه)",qos:"QoS",test:"تست",up:"بالا",
 caTitle:"گواهی CA اختصاصی (اختیاری)",caSub:"برای سرور با گواهی داخلی. خالی = گواهی‌های عمومی داخلی دستگاه.",saveCa:"ذخیرهٔ گواهی",caSet:"گواهی ثبت شده",caNone:"گواهی داخلی",
 mbTitle:"تنظیمات Modbus RTU",addrFromDip:"آدرس از دیپ‌سوئیچ (AD1..AD7)",manualAddr:"آدرس دستی (۱ تا ۲۴۷)",baud:"سرعت (Baud)",parity:"Parity",pNone:"None",pEven:"Even",pOdd:"Odd",stopBits:"Stop bits",respDelay:"تأخیر پاسخ (ms)",swap:"جابه‌جایی RX / TX",swapSub:"اگر برد پاسخ نمی‌دهد و سیم‌کشی درست است، این را فعال کنید (TX=GPIO17، RX=GPIO16).",
@@ -439,7 +478,8 @@ dash:"Dashboard",conn:"Connection",relays:"Relays & test",sys:"System",restart:"
 device:"Device",outputs:"Outputs",allOn:"All ON",allOff:"All OFF",openTest:"Test page",uptime:"Uptime",address:"Modbus address",heap:"Free memory",resetReason:"Last reset",boots:"Power-ups",apClients:"Connected clients",
 mWifi:"Wi-Fi / MQTT",mWifiSub:"Straight to the platform server over Wi-Fi",mRs:"RS-485 / Modbus RTU",mRsSub:"To the central hub or a PLC on the RS-485 bus",chooseMode:"Choose the connection type first.",
 wifiNet:"Wi-Fi network",scan:"Scan",scanning:"Scanning…",noNets:"No networks found",ssid:"Network (SSID)",password:"Password",savedPass:"•••••• (saved — type to change)",backupNet:"Backup network (optional)",dhcp:"Automatic IP (DHCP)",gateway:"Gateway",subnet:"Subnet",hostname:"Host name",ntp:"Time server (NTP)",
-testWifi:"Test Wi-Fi",servers:"Servers",serversSub:"Tried in order; the next one is used when one cannot be reached.",deviceId:"Device ID",telemetryS:"Status period (s)",
+testWifi:"Test Wi-Fi",servers:"Servers",serversSub:"Tried in order; the next one is used when one cannot be reached.",label:"Product label",labelSub:"The same QR as on the product: the customer scans it to add the device to their account. The claim code works once, for the first registration only.",serialNo:"Serial number",identifier:"Product identifier",claimCode:"Claim code",showCode:"Show code",hideCode:"Hide code",printLabel:"Print label",labelEdit:"Enter or change the label (from the production CSV)",labelNone:"No label is stored on this device. Store it on the production line with the serial console (qr and serial) or here.",firstUse:"first activation only",
+apiUrl:"Hub HTTP address (local key, rules, updates)",localEnabled:"Local control over the home Wi-Fi (internet down)",otaEnabled:"Accept firmware updates from the platform",localCtl:"Local control",offRules:"Offline rules",keyOk:"Key received",keyNone:"No key",deviceId:"Device ID",telemetryS:"Status period (s)",
 srvEnabled:"Enabled",srvName:"Name",proto:"Protocol",pPlatform:"TiTiSwitch platform",pGeneric:"Generic MQTT",host:"Server address",port:"Port",tls:"Secure (TLS)",user:"Username",clientId:"Client ID (empty = automatic)",prefix:"Topic prefix",base:"Base topic",keepalive:"Keepalive (s)",qos:"QoS",test:"Test",up:"Up",
 caTitle:"Custom CA certificate (optional)",caSub:"For a server with a private certificate. Empty = the built-in public CAs.",saveCa:"Save certificate",caSet:"Certificate set",caNone:"Built-in CAs",
 mbTitle:"Modbus RTU settings",addrFromDip:"Address from DIP switch (AD1..AD7)",manualAddr:"Manual address (1..247)",baud:"Baud rate",parity:"Parity",pNone:"None",pEven:"Even",pOdd:"Odd",stopBits:"Stop bits",respDelay:"Response delay (ms)",swap:"Swap RX / TX",swapSub:"If the board does not answer and the wiring is right, turn this on (TX=GPIO17, RX=GPIO16).",
@@ -469,6 +509,7 @@ function applyLang(){
   $("#ptitle").textContent=t(page);
   if(S){buildServers();buildRelaySettings();buildRegs();buildPreset();fill()}
   buildRelays();secretHints();
+  if(S&&$("#qrBox"))renderLabel();
 }
 function toast(msg,kind){const d=el("div","toast "+(kind||""),msg);$("#toasts").appendChild(d);setTimeout(()=>d.remove(),3500)}
 async function api(path,body,method){
@@ -494,7 +535,7 @@ async function start(){
   try{S=await api("/api/settings")}catch(e){return}
   S0=JSON.stringify(S);
   $("#login").classList.add("hide");$("#app").classList.remove("hide");
-  applyLang();info2();wsUi();connectWs();
+  applyLang();info2();wsUi();connectWs();loadLabel();
   try{ST=await api("/api/state");render()}catch(e){}
 }
 /* ---------- nav ---------- */
@@ -649,6 +690,7 @@ function render(){
   $("#cfgtx").textContent=t(ST.cfg?"on":"off");$("#cfgdot").className="dot "+(ST.cfg?"warn":"ok");
   $("#sup").textContent=fmtUp(ST.up);$("#sad").textContent=ST.addr||"—";$("#shp").textContent=Math.round(ST.heap/1024)+" KB";
   $("#srr").textContent=ST.reset;$("#sbt").textContent=ST.boots;$("#scl").textContent=ST.clients;
+  $("#slk").textContent=t(ST.localKey?"keyOk":"keyNone");$("#srl").textContent=ST.rules?ST.rules+" · v"+ST.rulesVer:t("none");
   const w=ST.wifi||{};$("#wttx").textContent=w.st==="connected"?t("connected")+" · "+w.ip+" · "+w.rssi+" dBm":t(w.st||"idle");
   $("#wtdot").className="dot"+(w.st==="connected"?" ok":w.st==="connecting"||w.st==="retry"?" warn":"");
   if(mtIdx>=0){const c=$("#mt"+mtIdx);if(c&&ST.mqttTest&&ST.mqttTest!=="testing"){c.textContent=ST.mqttTest==="ok"?"✓ "+t("ok"):"✗ "+ST.mqttTest;c.style.color=ST.mqttTest==="ok"?"var(--ok)":"var(--bad)"}}
@@ -673,6 +715,21 @@ function connectWs(){
   ws.onclose=()=>{wsOk=false;wsUi();if(token)setTimeout(connectWs,2000)};
 }
 function wsUi(){$("#wsdot").className="dot "+(wsOk?"ok":"bad");$("#wstx").textContent=t(wsOk?"live":"offline")}
+/* ---------- product label ---------- */
+let LB={qr:"",serial:""},codeShown=false,qrMod=null;
+function parseClaim(q){const m=/\/claim\/([^/]+)\/([^/?#]+)/.exec(q||"");return m?{id:decodeURIComponent(m[1]),code:decodeURIComponent(m[2])}:null}
+async function loadLabel(){try{LB=await api("/api/label")}catch(e){return}renderLabel()}
+async function renderLabel(){
+  const c=parseClaim(LB.qr),box=$("#qrBox");
+  $("#lblSn").textContent=LB.serial||"—";$("#lblId").textContent=c?c.id:"—";
+  $("#lblCode").textContent=c?(codeShown?c.code:c.code.replace(/[^-]/g,"•")):"—";
+  $("#lblShow").textContent=t(codeShown?"hideCode":"showCode");$("#lblShow").disabled=!c;$("#lblPrint").disabled=!LB.qr;
+  $("#lblNone").classList.toggle("hide",!!LB.qr);$("#lblHint").textContent=LB.qr?t("firstUse"):"";
+  $("#lblQrIn").value=LB.qr;$("#lblSnIn").value=LB.serial;
+  box.innerHTML="";box.classList.toggle("hide",!LB.qr);
+  if(LB.qr){try{qrMod=qrMod||await import("/static/qr.js");box.appendChild(qrMod.qrSvg(LB.qr,190,t("label")))}catch(e){box.classList.add("hide")}}
+}
+async function saveLabel(){try{await api("/api/label",{qr:$("#lblQrIn").value.trim(),serial:$("#lblSnIn").value.trim()});toast(t("saved"),"ok");loadLabel()}catch(e){toast(t("invalid")+"QR","bad")}}
 /* ---------- system ---------- */
 function modal(build){const m=$("#modal");m.innerHTML="";const bg=el("div","modal");const box=el("div","box");build(box,()=>{m.innerHTML=""});bg.appendChild(box);
   bg.onclick=e=>{if(e.target===bg)m.innerHTML=""};m.appendChild(bg)}
@@ -711,6 +768,7 @@ $("#lbtn").onclick=login;$("#lpass").addEventListener("keydown",e=>{if(e.key==="
 $("#save").onclick=save;$("#discard").onclick=discard;$("#scanBtn").onclick=()=>scan(true);
 $("#wtest").onclick=async()=>{if(JSON.stringify(S)!==S0){toast(t("saveFirst"),"bad");return}await api("/api/action",{do:"wifiTest"});toast(t("testing")+"…")};
 $("#walk").onclick=()=>api("/api/action",{do:ST.walk>=0?"walkStop":"walk"});$("#ident").onclick=()=>api("/api/action",{do:"identify"});
+$("#lblShow").onclick=()=>{codeShown=!codeShown;renderLabel()};$("#lblPrint").onclick=()=>window.print();$("#lblSave").onclick=saveLabel;
 $("#otaBtn").onclick=ota;$("#bkBtn").onclick=backup;$("#rsFile").onchange=e=>{if(e.target.files[0])restoreFile(e.target.files[0])};$("#facBtn").onclick=factoryDlg;
 $("#caSave").onclick=async()=>{try{await api("/api/ca",{pem:$("#ca").value.trim()});toast(t("saved"),"ok");$("#caState").textContent=t($("#ca").value.trim()?"caSet":"caNone")}catch(e){toast(t("invalid")+"CA","bad")}};
 $("#logPause").onclick=()=>{logPaused=!logPaused;$("#logPause").textContent=t(logPaused?"resume":"pause")};$("#logClear").onclick=()=>{$("#log").innerHTML=""};

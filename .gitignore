@@ -10,3 +10,10 @@ build/
 
 # Settings backups exported from the portal hold Wi-Fi and server passwords
 *backup*.json
+
+# Production label exports: every unit's device secret and claim code
+*.csv
+*.csv.done
+
+# Python
+__pycache__/

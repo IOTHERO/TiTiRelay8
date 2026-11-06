@@ -48,6 +48,9 @@ struct Settings {
   ServerCfg servers[MAX_SERVERS];
   char deviceId[32];      // platform device id used in the topics d/<id>/...
   uint16_t telemetryS;    // heartbeat period
+  char apiUrl[96];        // hub HTTP(S) base, e.g. https://hub.example.com: config, rules, firmware
+  bool localEnabled;      // control from the app over the home Wi-Fi (signed, key from the hub)
+  bool otaEnabled;        // accept firmware offers from the platform
 
   // RS-485 / Modbus RTU slave
   uint8_t mbAddrFromDip;  // 1 = address from DIP AD1..AD7, 0 = mbAddr
@@ -85,13 +88,23 @@ bool validate(Settings& s, String& err);
 void toJson(const Settings& s, JsonObject out, bool withSecrets);
 // Fill s from JSON (keys missing in json keep s's value; an empty password keeps the old one).
 void fromJson(Settings& s, JsonObjectConst in);
-void factoryReset();
+// Back to factory settings. The production identity stays (device id, platform servers with
+// their secret, hub address, CA, product label) unless wipeIdentity: then the unit is blank.
+void factoryReset(bool wipeIdentity = false);
+
+// Product label from the production CSV (labels: identifier, serial, claim code, qr). Kept
+// apart from the settings; a factory reset keeps it.
+struct Label { String qr; String serial; };
+Label label();
+bool setLabel(const String& qr, const String& serial);
 
 // Shared CA certificate (PEM) for TLS servers; empty = the built-in CA bundle.
 String caPem();
 bool setCaPem(const String& pem);
 
 uint8_t modbusAddress();           // effective address (DIP or manual)
+int8_t platformServer();           // first enabled platform server, -1 if none
+const char* deviceSecret();        // that server's password = the device secret
 String apSsid();
 String defaultClientId();
 }

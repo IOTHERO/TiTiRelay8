@@ -8,6 +8,8 @@
 #include "health.h"
 #include "inputs.h"
 #include "leds.h"
+#include "local.h"
+#include "rules.h"
 #include "cloud.h"
 #include "log.h"
 #include "net.h"
@@ -119,6 +121,9 @@ void buildState(JsonDocument& d, bool withLog) {
   w["rssi"] = net::rssi();
   d["mqttTest"] = cloud::testResult();
   d["clients"] = WiFi.softAPgetStationNum();
+  d["localKey"] = local::keySet();
+  d["rules"] = rules::count();
+  d["rulesVer"] = rules::version();
   if (withLog) {
     logx::Entry e[12];
     uint8_t n = logx::since(lastLogSent, e, 12);
@@ -260,6 +265,19 @@ void routes() {
     AsyncWebServerResponse* res = r->beginResponse(200, "application/json", s);
     res->addHeader("Content-Disposition", "attachment; filename=titi-relay8-backup.json");
     r->send(res);
+  });
+
+  server.on("/api/label", HTTP_GET, [](AsyncWebServerRequest* r) {
+    if (!authed(r)) return sendError(r, 401, "login");
+    settings::Label l = settings::label();
+    JsonDocument d;
+    d["qr"] = l.qr;
+    d["serial"] = l.serial;
+    sendJson(r, 200, d);
+  });
+
+  jsonRoute("/api/label", [](AsyncWebServerRequest* r, JsonObjectConst in) {
+    settings::setLabel(in["qr"] | "", in["serial"] | "") ? sendOk(r) : sendError(r, 400, "invalid", "qr");
   });
 
   jsonRoute("/api/ca", [](AsyncWebServerRequest* r, JsonObjectConst in) {
