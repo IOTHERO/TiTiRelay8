@@ -17,3 +17,6 @@ build/
 
 # Python
 __pycache__/
+
+# Release builds (tools/build_release.ps1)
+release/

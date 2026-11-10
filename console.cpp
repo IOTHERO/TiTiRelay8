@@ -101,14 +101,14 @@ void run(char* cmd) {
   } else if (!strcmp(cmd, "serial") && arg) {
     settings::Label l = settings::label();
     reply(settings::setLabel(l.qr, arg) ? "serial number stored" : "refused: up to 40 characters");
-  } else if (!strcmp(cmd, "wipe") && arg && !strcmp(arg, "yes")) {
+  } else if ((!strcmp(cmd, "wipe") || !strcmp(cmd, "factory")) && arg && !strcmp(arg, "yes")) {
+    // The production console erases the identity too, so a board can be provisioned again
+    // (hub-provision refuses a board that still holds a device id). The customer's factory
+    // reset (portal, config switch) keeps it.
     settings::factoryReset(true);
     health::restart("erased from the serial console");
   } else if (!strcmp(cmd, "restart")) {
     health::restart("serial console");
-  } else if (!strcmp(cmd, "factory") && arg && !strcmp(arg, "yes")) {
-    settings::factoryReset();
-    health::restart("factory reset from the serial console");
   } else {
     reply("unknown command (help)");
   }

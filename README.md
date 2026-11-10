@@ -5,12 +5,28 @@ registers it as a product; the subscriber uses it. It talks to the platform over
 (the hub's `native` device contract) or sits on an **RS-485** bus as a **Modbus RTU slave**
 behind a central hub or a PLC.
 
+## Flash a ready build
+
+`release/TiTiRelay8-<version>/` (made by `tools/build_release.ps1`, not in git) holds everything a
+production PC needs, with `esptool.exe` included:
+
+| File | What |
+|---|---|
+| `TiTiRelay8-<v>-full.bin` | everything for a blank chip, written at `0x0`: bootloader, partitions, firmware and the web UI |
+| `TiTiRelay8-<v>-littlefs.bin` | the web UI alone (`data/`, LittleFS at `0x3D0000`): portal System page with "web UI image" on |
+| `TiTiRelay8-<v>-ota.bin` | firmware only: portal System page, or a firmware release in the maker panel |
+| `flash.bat COM5` | erases the chip and writes `full.bin` (Windows) |
+| `README-fa.md`, `SHA256SUMS.txt`, `product-template.json` | Persian flashing guide, checksums, the product for the maker panel |
+
+After flashing, the board starts the config portal (no mode chosen yet), or takes its identity
+from `hub-provision` on the production line (below).
+
 ## Build (Arduino IDE 2)
 
 | Setting | Value |
 |---|---|
 | Board | ESP32 Dev Module (esp32 core 3.x, tested with 3.3.10) |
-| Partition scheme | **Minimal SPIFFS (1.9MB APP with OTA / 190KB SPIFFS)** |
+| Partition scheme | **Minimal SPIFFS (1.9MB APP with OTA / 190KB SPIFFS)**: two 1.9 MB app slots, 128 KB LittleFS at `0x3D0000` |
 | Libraries | ArduinoJson 7, ESP Async WebServer 3.x, Async TCP 3.x (MQTT and Modbus are built in) |
 
 1. Open `TiTiRelay8.ino`, choose the settings above, **Upload** (firmware).
@@ -30,11 +46,11 @@ The maker panel exports the labels CSV of a batch with credentials
 (`identifier, serial_number, claim_code, qr, device_id, device_secret`). One row belongs to one
 unit: its platform identity and the QR printed on its label.
 
-**Script** (`pip install pyserial`): it takes the next unused row for each unit you plug in,
-programs it and records it in `<csv>.done`, so a row is never used twice:
+**`hub-provision`** (in the hub repository, `hub/provision.py`) programs one board per CSV row over
+USB through the serial console below, and logs every row so it is never used twice:
 
 ```
-python tools/program_units.py --csv labels.csv --port COM5 --server mqtt.example.com:8883 --tls --api https://hub.example.com
+hub-provision --csv labels.csv --port COM5 --broker mqtt.example.com:8883 --api https://hub.example.com --mode wifi --repeat
 ```
 
 The CSV holds every unit's secret. Keep it off shared drives, and delete it when the batch is
@@ -55,8 +71,9 @@ restart
 ```
 
 Then `qr <label link>` and `serial <serial number>` store the product label. `show` prints the
-settings. `factory yes` restores the factory settings and keeps the identity and the label.
-`wipe yes` erases everything.
+settings. On this console `factory yes` (or `wipe yes`) erases everything, identity and label
+included, so a board can be provisioned again (`hub-provision` refuses a board that still holds a
+device id).
 
 ## Product label (QR) in the portal
 
@@ -68,9 +85,10 @@ sticker stays the main copy; this is the spare when it is lost or unreadable. On
 with the config switch and the admin password can see it.
 
 **Lost admin password:** in the config portal, turn the config switch OFF and ON again 5 times
-within 15 s. The module returns to factory settings. A factory reset (from here, the portal or the
-console) keeps the production identity (device id, platform server and secret, hub address, CA)
-and the label, so the unit still reaches the platform afterwards.
+within 15 s. The module returns to factory settings. The customer's factory reset (this gesture
+or the portal's System page) keeps the production identity (device id, platform server and
+secret, hub address, CA) and the label, so the unit still reaches the platform afterwards. Only
+the production console erases the identity.
 
 ## Pins (from the schematic)
 
