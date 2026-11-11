@@ -40,9 +40,22 @@ if ($Ca) {
   Write-Host 'No device CA given: a TLS server needs it pasted in the portal (Connection page).'
 }
 
-Write-Host 'Building the LittleFS image ...'
-& (Join-Path $mklittlefs.FullName 'mklittlefs.exe') -c $fsDir -p 256 -b 4096 -s $fsSize (Join-Path $out "TiTiRelay8-$version-littlefs.bin")
-if ($LASTEXITCODE -ne 0) { throw 'mklittlefs failed (does data\ fit in 128 KB?)' }
+Write-Host 'Building the LittleFS image (the web UI) ...'
+$mk = Join-Path $mklittlefs.FullName 'mklittlefs.exe'
+$fsImage = Join-Path $out "TiTiRelay8-$version-littlefs.bin"
+$mkOut = & $mk -c $fsDir -p 256 -b 4096 -s $fsSize $fsImage 2>&1 | Out-String
+# mklittlefs ends with exit code 0 even when the partition is full (the image then silently lacks
+# files), so the output is checked and every file of the folder must be listed in the image.
+if ($LASTEXITCODE -ne 0 -or $mkOut -match 'error') { throw "the web UI does not fit in the 128 KB LittleFS partition:`n$mkOut" }
+$listing = (& $mk -l $fsImage -s $fsSize -b 4096 -p 256 2>&1 | Out-String)
+$fsRoot = (Resolve-Path $fsDir).Path
+$total = 0
+foreach ($f in Get-ChildItem $fsDir -Recurse -File) {
+  $rel = '/' + ($f.FullName.Substring($fsRoot.Length + 1) -replace '\\', '/')
+  if ($listing -notmatch ('(?m)^' + $f.Length + '\s+' + [regex]::Escape($rel) + '\s')) { throw "$rel is missing in the LittleFS image (partition full?)" }
+  $total += $f.Length
+}
+Write-Host ('Web files: {0:N0} bytes of the {1:N0}-byte partition (keep the total under about 110 KB)' -f $total, $fsSize)
 
 # One image for a blank chip: bootloader, partition table, OTA data, firmware and the web UI.
 # (The IDE's .merged.bin is padded to 4 MB and would overlap the LittleFS image.)
@@ -76,6 +89,43 @@ echo FLASHING FAILED. Check the port and hold BOOT while it connects if needed.
 exit /b 1
 "@
 Set-Content -Path (Join-Path $out 'flash.bat') -Value $flash -Encoding ascii
+
+# Only the web UI (LittleFS at 0x3D0000): settings, identity and firmware stay as they are.
+$flashWeb = @"
+@echo off
+rem Writes only the web UI of TiTi Relay-8 $version (LittleFS): flash-web.bat COM5
+if "%~1"=="" ( echo Usage: flash-web.bat COM5 & exit /b 1 )
+cd /d "%~dp0"
+esptool.exe --chip esp32 --port %1 --baud 921600 write-flash 0x3D0000 TiTiRelay8-$version-littlefs.bin || goto :fail
+echo.
+echo Done: the web UI is updated. The board keeps its settings and its firmware.
+exit /b 0
+:fail
+echo.
+echo FLASHING FAILED. Check the port and hold BOOT while it connects if needed.
+exit /b 1
+"@
+Set-Content -Path (Join-Path $out 'flash-web.bat') -Value $flashWeb -Encoding ascii
+
+# Only the firmware (app slot at 0x10000): settings, identity and the web UI stay as they are.
+# otadata is erased first so the board boots the slot written here (a board that was updated over
+# the air may have been running the other slot).
+$flashFw = @"
+@echo off
+rem Writes only the firmware of TiTi Relay-8 ${version}: flash-firmware.bat COM5
+if "%~1"=="" ( echo Usage: flash-firmware.bat COM5 & exit /b 1 )
+cd /d "%~dp0"
+esptool.exe --chip esp32 --port %1 --baud 921600 erase-region 0xe000 0x2000 || goto :fail
+esptool.exe --chip esp32 --port %1 --baud 921600 write-flash 0x10000 TiTiRelay8-$version-ota.bin || goto :fail
+echo.
+echo Done: the firmware is updated. The board keeps its settings and its web UI.
+exit /b 0
+:fail
+echo.
+echo FLASHING FAILED. Check the port and hold BOOT while it connects if needed.
+exit /b 1
+"@
+Set-Content -Path (Join-Path $out 'flash-firmware.bat') -Value $flashFw -Encoding ascii
 
 Get-ChildItem $out | ForEach-Object { '{0,-36} {1,10:N0} bytes' -f $_.Name, $_.Length }
 Get-ChildItem $out -Filter *.bin | ForEach-Object { '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } |

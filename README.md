@@ -16,6 +16,8 @@ production PC needs, with `esptool.exe` included:
 | `TiTiRelay8-<v>-littlefs.bin` | the web UI alone (`data/`, LittleFS at `0x3D0000`): portal System page with "web UI image" on |
 | `TiTiRelay8-<v>-ota.bin` | firmware only: portal System page, or a firmware release in the maker panel |
 | `flash.bat COM5` | erases the chip and writes `full.bin` (Windows) |
+| `flash-web.bat COM5` | writes only the web UI (`littlefs.bin` at `0x3D0000`); settings and firmware stay |
+| `flash-firmware.bat COM5` | writes only the firmware (`ota.bin` at `0x10000`); settings, identity and web UI stay |
 | `README-fa.md`, `SHA256SUMS.txt`, `product-template.json` | Persian flashing guide, checksums, the product for the maker panel |
 
 After flashing, the board starts the config portal (no mode chosen yet), or takes its identity
@@ -46,6 +48,31 @@ from `hub-provision` on the production line (below).
    "web UI image" switch on.
 
 The serial log runs at 115200 baud.
+
+## Web UI on LittleFS (separate from the firmware)
+
+The menu pages are **not** part of the firmware. They are the files of `data/`
+(`index.html`, `static/qr.js`, and `ca.pem` when a device CA is shipped) and live in the LittleFS
+partition (`spiffs`, 128 KB at `0x3D0000`). You can change and upload them without touching the
+firmware, settings or identity. Three ways:
+
+1. **Arduino IDE 2**: install the
+   [arduino-littlefs-upload](https://github.com/earlephilhower/arduino-littlefs-upload) plugin, choose
+   the **Minimal SPIFFS** partition scheme, close the Serial Monitor, then `Ctrl+Shift+P` →
+   *Upload LittleFS to Pico/ESP8266/ESP32*.
+2. **Release folder**: `flash-web.bat COM5` writes `littlefs.bin` (made by `tools\build_release.ps1`
+   from `data/`, plus `ca.pem` if `certs\ca.crt` exists).
+3. **The portal**, System page: tick "This is the web UI image (LittleFS)" and choose `littlefs.bin`.
+
+**Size:** the partition is 128 KB and the files are about 88 KB, so there is room for roughly
+20-30 KB more. `mklittlefs` ends with exit code 0 even when the partition is full (the image then silently
+lacks files); `build_release.ps1` therefore checks that every file is in the image and stops with an
+error if not. Without the web UI the board shows a small page that can install a LittleFS image.
+
+**Wear:** reading never wears flash. LittleFS is only read at run time (the pages in config mode, `ca.pem`
+once per TLS connection); it is written only when you upload. What is written while the board runs is the
+settings and the relay state in NVS (with wear leveling, and throttled: a state is stored only once it
+has held 3 s and at most every 10 s).
 
 ## Production line
 
