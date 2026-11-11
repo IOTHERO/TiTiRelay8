@@ -1,0 +1,6 @@
+{
+  "cpu": {
+    "fqbn": "esp32:esp32:esp32:PartitionScheme=min_spiffs",
+    "name": "ESP32 Dev Module"
+  }
+}

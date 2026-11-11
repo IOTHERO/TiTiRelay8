@@ -23,6 +23,13 @@ from `hub-provision` on the production line (below).
 
 ## Build (Arduino IDE 2)
 
+> **Choose the partition scheme before compiling.** With the default scheme the IDE stops with
+> `Sketch too big ... 112% ... text section exceeds available space in board`. The program is about
+> 1.47 MB (74 % of the right scheme) and needs two OTA slots: *Tools → Partition Scheme →*
+> **Minimal SPIFFS (1.9MB APP with OTA/190KB SPIFFS)**. `sketch.json` and `sketch.yaml` select it
+> automatically in Arduino IDE 2 and arduino-cli; check that the Tools menu really shows it.
+> (The same scheme must be used when uploading the LittleFS image: the web UI lives at `0x3D0000`.)
+
 | Setting | Value |
 |---|---|
 | Board | ESP32 Dev Module (esp32 core 3.x, tested with 3.3.10) |
