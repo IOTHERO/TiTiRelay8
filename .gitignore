@@ -20,3 +20,6 @@ __pycache__/
 
 # Release builds (tools/build_release.ps1)
 release/
+
+# Site-specific device CA for the release build (never put ca.key here)
+certs/

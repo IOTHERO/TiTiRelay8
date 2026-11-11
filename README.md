@@ -75,6 +75,36 @@ settings. On this console `factory yes` (or `wipe yes`) erases everything, ident
 included, so a board can be provisioned again (`hub-provision` refuses a board that still holds a
 device id).
 
+## Connecting a board to the server (TLS with a private CA)
+
+1. **Labels with credentials.** In the maker panel, export the labels CSV with credentials. The
+   printed label alone has only the identifier and the claim code. The CSV also has `device_id`
+   and `device_secret` (shown once; exporting again rotates the secret).
+2. **The device CA.** Copy `deploy/ca/ca.crt` from the server (the certificate only, never
+   `ca.key`) to `certs\ca.crt` here and run `tools\build_release.ps1`: it goes into the web UI
+   image as `/ca.pem`, so no board needs a per-board step. Or paste it in the portal (Connection
+   page, "Custom CA certificate"); a pasted certificate wins over the shipped one.
+3. **Flash** `flash.bat COM5`, then on the serial console (115200):
+
+```
+id <device_id>
+secret <device_secret>
+server <server address> 8883 tls
+api https://<server address>
+wifi <network> <password>
+mode wifi
+qr <the qr column of the CSV>
+serial <serial number>
+save
+restart
+```
+
+4. The RUN LED blinks slowly; once the module is connected the DATA LED stays on. The customer
+   adds the device in the app by scanning the label QR.
+
+TLS needs a correct clock: the module waits up to 20 s for NTP before it connects. If NTP is not
+reachable from the site, set another time server in the portal (Connection page).
+
 ## Product label (QR) in the portal
 
 System page → **Product label**: the same QR as on the sticker, plus the serial number, the
@@ -90,15 +120,34 @@ or the portal's System page) keeps the production identity (device id, platform 
 secret, hub address, CA) and the label, so the unit still reaches the platform afterwards. Only
 the production console erases the identity.
 
+## Source files (12)
+
+| File | What |
+|---|---|
+| `config.h` | **All settings in one place**, with Persian comments: identity, pins, timings and limits of every part, the defaults, and the `Settings` structure |
+| `core.h` | The interfaces between the parts (what each part offers to the others); light on purpose, no heavy libraries |
+| `TiTiRelay8.ino` | Main program, plus the small basics: serial log, health/watchdog, inputs (DIP), LEDs, the production console |
+| `settings.cpp` | Saving and loading the settings (versioned, update-safe), identity backup, label, CA |
+| `relays.cpp` | Relays: command queue, interlock, pulse, spacing, state saving |
+| `net.cpp` | Wi-Fi and the clock |
+| `cloud.cpp` | MQTT link to the servers |
+| `hubapi.cpp` | HTTPS to the hub: local key, rules, firmware update |
+| `local.cpp` | Local control over the home Wi-Fi |
+| `rules.cpp` | Offline rules |
+| `modbus.cpp` | Modbus RTU slave |
+| `portal.cpp` | The config portal (web) and the settings JSON |
+
+To change a pin, a timing or a default, edit `config.h` only. (The files were merged from 30 to 12 so the project is quicker to build; heavy libraries such as ArduinoJson and the web server are included only by the parts that use them.)
+
 ## Pins (from the schematic)
 
 | Function | GPIO |
 |---|---|
-| Relays K1..K7 (ULN2803, HIGH = ON) | 5, 18, 19, 21, 22, 23, 13 |
-| Relay K8 | 12, **not used** (strapping pin MTDI). `ENABLE_RELAY8_GPIO12` in `board.h` |
+| Relays K1..K8 (ULN2803, HIGH = ON) | 5, 18, 19, 21, 22, 23, 13, 12 |
+| Relay K8 (GPIO12) | MTDI strapping pin, must be LOW at boot: the 10k pull-down on the ULN2803 input holds it, and the firmware drives it LOW first. `ENABLE_RELAY8_GPIO12 0` in `config.h` leaves it unused |
 | LED DATA / RUN | 14 / 27 |
 | RS-485 DE+RE (SE) | 4 |
-| RS-485 TX → DI / RX ← RO | 16 / 17 (net names ADM_TXD / ADM_RXD); "Swap RX/TX" in the portal |
+| RS-485 RX ← RO (U2RXD) / TX → DI (U2TXD) | 16 / 17; "Swap RX/TX" in the portal if a board is wired the other way |
 | DIP AD1..AD7 (address, AD1 = bit 0) | 36, 39, 34, 35, 32, 33, 25 |
 | DIP AD8 = config switch | 26 |
 
@@ -183,12 +232,15 @@ refused.
 ## Product in the platform
 
 `platform/product-template.json` is the product template for the manufacturer panel (checked
-with the hub's `ProductTemplate` validator). It has the tags `relay_1`..`relay_7` (digital outputs,
+with the hub's `ProductTemplate` validator). It has the tags `relay_1`..`relay_8` (digital outputs,
 command write class) and `uptime_s`, plus the commands "all off" and "all on". It also has two
 bindings:
 
 - `native`: the Wi-Fi/MQTT mode (stale after 120 s);
-- `modbus_rtu`: the RS-485 mode, coils 0..6 and input register 4 (uptime), polled every 500 ms.
+- `modbus_rtu`: the RS-485 mode, coils 0..7 and input register 4 (uptime), polled every 500 ms.
+
+The tag keys the module reports are exactly `relay_1`..`relay_8` and `uptime_s`. A product defined
+in the maker panel must use these keys.
 
 Each unit then gets its device id and secret from the platform. Enter them in the portal
 (Device ID, and the server's username/password).
@@ -222,6 +274,30 @@ the default order.
 Also FC8 sub-function 0 (echo). Broadcast (address 0) writes are carried out without a reply.
 Address 0 from the DIP switch is invalid: the board does not answer and the RUN LED shows a fault.
 
+### Start addresses and PLC compatibility
+
+Every table (Coil, Discrete, Input, Holding) has a **start address** in the portal (Connection →
+RS-485). The address on the wire is `start address + register number`; the table in the portal
+shows the result, in the 0-based form and in the 1-based PLC form (00001, 10001, 30001, 40001).
+
+- Default: all four start at **0** (standard). Use this with the hub and with Modbus Poll.
+- **"Start at 1" preset**: for PLCs or HMIs that count from 1 and put 1 on the wire for the first
+  register (the usual "one register off" problem).
+- **Custom**: any start (0..65535) per table, for a PLC that only reads inside a fixed range, for
+  example Holding starting at 100.
+- **Tolerate block reads**: a PLC that reads a block of which only part is in the map gets zeros for
+  the part outside instead of exception 02. A request entirely outside the map still gets exception
+  02, so a wrong address is noticed. Block writes ignore the part outside.
+
+PLC tools write the address in the 1-based form with a prefix per table (0xxxx coils, 1xxxx discrete
+inputs, 3xxxx input registers, 4xxxx holding registers) and subtract it again before sending. This is
+the common convention (also for Siemens MB_CLIENT / MB_MASTER), but the vendors' own documents differ and
+some tools are off by one, so test one read with Modbus Poll first and then on the PLC; if it is one
+register off, use the "Start at 1" preset. Not verified against Siemens' manual here.
+
+If the **hub** reads the board over RS-485 (the product template's `modbus_rtu` binding uses
+addresses 0..), leave every start address at 0, or change the binding addresses to match.
+
 ## Industrial behaviour
 
 - **Commands survive a power cut**: the relay state is stored in NVS and restored per relay (last
@@ -248,15 +324,18 @@ Address 0 from the DIP switch is invalid: the board does not answer and the RUN 
 
 ## LEDs
 
-| RUN LED | Meaning |
-|---|---|
-| steady | starting |
-| fast blink | config portal |
-| slow blink (1 s) | link OK |
-| double blink | no server / no Modbus master |
-| triple blink | safe mode or invalid address |
+RUN shows the **health of the module**, DATA shows the **link**:
 
-DATA flashes on every message or frame. Identify flashes both LEDs.
+| LED | Meaning |
+|---|---|
+| RUN steady | config portal (and the first moments of start-up) |
+| RUN slow blink (1 Hz) | healthy |
+| RUN fast blink (5 Hz) | fault: safe mode, invalid Modbus address (DIP = 0), no server configured, free memory low |
+| DATA steady ON | connected to the server (Wi-Fi mode) / a Modbus master was heard in the last 5 s (RS-485) |
+| DATA off | no connection (RUN still blinks slowly: the module itself is fine) |
+| DATA flicker | a message or frame: a short OFF while connected, a short ON while not |
+
+Identify (portal, Modbus holding 1 = 2) flashes both LEDs alternately for 10 s.
 
 ## Not included
 

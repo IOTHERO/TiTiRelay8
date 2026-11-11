@@ -1,16 +1,19 @@
-#include "net.h"
+// =====================================================================================
+//  net.cpp — اتصال وای‌فای (Station) و ساعت
+// =====================================================================================
+//
+//  وای‌فای اصلی و پشتیبان، IP ثابت یا DHCP. اگر اتصال برقرار نشود یا قطع شود، با فاصلهٔ
+//  افزایشی (۵ ثانیه تا ۱ دقیقه، با کمی تصادفی) دوباره تلاش می‌کند و بین شبکهٔ اصلی و پشتیبان
+//  جابه‌جا می‌شود. پس از اتصال، ساعت از سرور NTP گرفته می‌شود (TLS و قواعد زمانی به آن نیاز دارند).
+//  همهٔ زمان‌ها و سرورهای زمان پشتیبان در config.h هستند.
+// =====================================================================================
 #include <WiFi.h>
 #include <sys/time.h>
 #include <time.h>
-#include "log.h"
-#include "settings.h"
+#include "core.h"
 
 namespace net {
 namespace {
-constexpr uint32_t CONNECT_TIMEOUT_MS = 20000;
-constexpr uint32_t BACKOFF_MIN_MS = 5000;
-constexpr uint32_t BACKOFF_MAX_MS = 60000;
-
 enum State : uint8_t { OFF, WAIT, CONNECTING, UP };
 State state = OFF;
 uint8_t netIdx = 0;
@@ -39,10 +42,11 @@ void start() {
 void retryLater() {
   WiFi.disconnect(false, false);
   failures++;
-  uint32_t delayMs = BACKOFF_MIN_MS << (failures > 4 ? 4 : failures - 1);
-  if (delayMs > BACKOFF_MAX_MS) delayMs = BACKOFF_MAX_MS;
-  delayMs += esp_random() % 2000;
-  // Alternate to the backup network after each failed try on the main one.
+  // فاصلهٔ تلاش بعدی: ۵ ثانیه، ۱۰، ۲۰، ... تا سقف یک دقیقه، به‌علاوهٔ مقدار تصادفی
+  uint32_t delayMs = WIFI_BACKOFF_MIN_MS << (failures > 4 ? 4 : failures - 1);
+  if (delayMs > WIFI_BACKOFF_MAX_MS) delayMs = WIFI_BACKOFF_MAX_MS;
+  delayMs += esp_random() % WIFI_BACKOFF_JITTER_MS;
+  // پس از هر شکست، به شبکهٔ دیگر (اصلی ↔ پشتیبان) برو.
   if (settings::cur.nets[1].ssid[0]) netIdx ^= 1;
   nextAt = millis() + delayMs;
   state = WAIT;
@@ -86,10 +90,10 @@ void loop() {
         LOGI("wifi", "connected: %s, rssi %d dBm, ch %d", WiFi.localIP().toString().c_str(),
              WiFi.RSSI(), WiFi.channel());
         if (!ntpStarted && settings::cur.ntp[0]) {
-          configTime(0, 0, settings::cur.ntp, "pool.ntp.org", "time.google.com");
+          configTime(0, 0, settings::cur.ntp, NTP_FALLBACK_1, NTP_FALLBACK_2);
           ntpStarted = true;
         }
-      } else if (now - since > CONNECT_TIMEOUT_MS) {
+      } else if (now - since > WIFI_CONNECT_TIMEOUT_MS) {
         retryLater();
       }
       return;

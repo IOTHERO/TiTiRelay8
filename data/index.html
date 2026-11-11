@@ -340,6 +340,19 @@ main{padding-bottom:130px}
           <p class="sub" style="margin:0" data-t="swapSub"></p>
           <label class="tg"><span data-t="wordSwap"></span><input type="checkbox" data-k="mb.wordSwap"><i></i></label>
           <p class="sub" style="margin:0" data-t="wordSwapSub"></p>
+          <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+          <h3><span data-t="mbBaseTitle"></span></h3>
+          <p class="sub" data-t="mbBaseSub"></p>
+          <label class="f"><span data-t="preset"></span><select class="in" id="mbPreset">
+            <option value="0" data-t="presetStd"></option><option value="1" data-t="presetOne"></option><option value="c" data-t="presetCustom"></option></select></label>
+          <div class="row">
+            <label class="f"><span data-t="baseCoil"></span><input class="in ltr" type="number" min="0" max="65535" data-k="mb.base.0"></label>
+            <label class="f"><span data-t="baseDiscrete"></span><input class="in ltr" type="number" min="0" max="65535" data-k="mb.base.1"></label>
+            <label class="f"><span data-t="baseInput"></span><input class="in ltr" type="number" min="0" max="65535" data-k="mb.base.2"></label>
+            <label class="f"><span data-t="baseHolding"></span><input class="in ltr" type="number" min="0" max="65535" data-k="mb.base.3"></label>
+          </div>
+          <label class="tg"><span data-t="lenient"></span><input type="checkbox" data-k="mb.lenient"><i></i></label>
+          <p class="sub" style="margin:0" data-t="lenientSub"></p>
         </div>
         <div class="card">
           <h3 data-t="regMap"></h3>
@@ -464,8 +477,9 @@ testWifi:"تست اتصال وای‌فای",servers:"سرورها",serversSub:"
 apiUrl:"نشانی HTTP هاب (برای کلید محلی، قواعد و آپدیت)",localEnabled:"کنترل محلی از وای‌فای خانه (وقتی اینترنت قطع است)",otaEnabled:"پذیرش آپدیت Firmware از پلتفرم",localCtl:"کنترل محلی",offRules:"قواعد آفلاین",keyOk:"کلید دریافت شده",keyNone:"بدون کلید",deviceId:"شناسهٔ دستگاه (Device ID)",telemetryS:"دورهٔ ارسال وضعیت (ثانیه)",
 srvEnabled:"فعال",srvName:"نام",proto:"پروتکل",pPlatform:"پلتفرم TiTiSwitch",pGeneric:"MQTT عمومی",host:"آدرس سرور",port:"پورت",tls:"اتصال امن (TLS)",user:"نام کاربری",clientId:"Client ID (خالی = خودکار)",prefix:"پیشوند تاپیک",base:"تاپیک پایه",keepalive:"Keepalive (ثانیه)",qos:"QoS",test:"تست",up:"بالا",
 caTitle:"گواهی CA اختصاصی (اختیاری)",caSub:"برای سرور با گواهی داخلی. خالی = گواهی‌های عمومی داخلی دستگاه.",saveCa:"ذخیرهٔ گواهی",caSet:"گواهی ثبت شده",caNone:"گواهی داخلی",
-mbTitle:"تنظیمات Modbus RTU",addrFromDip:"آدرس از دیپ‌سوئیچ (AD1..AD7)",manualAddr:"آدرس دستی (۱ تا ۲۴۷)",baud:"سرعت (Baud)",parity:"Parity",pNone:"None",pEven:"Even",pOdd:"Odd",stopBits:"Stop bits",respDelay:"تأخیر پاسخ (ms)",swap:"جابه‌جایی RX / TX",swapSub:"اگر برد پاسخ نمی‌دهد و سیم‌کشی درست است، این را فعال کنید (TX=GPIO17، RX=GPIO16).",
-regMap:"نقشهٔ رجیسترها",plcCol:"آدرس PLC",accessCol:"دسترسی",accRW:"خواندن/نوشتن",accR:"فقط خواندن",accW:"فقط نوشتن",plcSub:"«آدرس» صفرمبنا است (مثل Modbus Poll)؛ «آدرس PLC» شمارهٔ یک‌مبنای رایج در Siemens، Delta و HMIهاست.",wordSwap:"ترتیب کلمه: اول کلمهٔ پایین (Low word first)",wordSwapSub:"برای عددهای ۳۲ بیتی (زمان کارکرد، دفعات کار رله). پیش‌فرض: اول کلمهٔ بالا.",table:"جدول",addrCol:"آدرس",meaning:"کاربرد",lossTitle:"قطع ارتباط",lossSub:"اگر در این مدت پیامی از سرور یا Master نرسد، این اقدام یک بار انجام می‌شود. صفر = غیرفعال.",lossTimeout:"مهلت (ثانیه)",lossAction:"اقدام",lHold:"حفظ وضعیت فعلی",lOff:"خاموش کردن همهٔ رله‌ها",lPreset:"وضعیت از پیش تعیین شده",
+mbTitle:"تنظیمات Modbus RTU",addrFromDip:"آدرس از دیپ‌سوئیچ (AD1..AD7)",manualAddr:"آدرس دستی (۱ تا ۲۴۷)",baud:"سرعت (Baud)",parity:"Parity",pNone:"None",pEven:"Even",pOdd:"Odd",stopBits:"Stop bits",respDelay:"تأخیر پاسخ (ms)",swap:"جابه‌جایی RX / TX",swapSub:"اگر برد پاسخ نمی‌دهد و سیم‌کشی درست است، این را فعال کنید (TX=GPIO16، RX=GPIO17).",
+regMap:"نقشهٔ رجیسترها",plcCol:"آدرس PLC",accessCol:"دسترسی",accRW:"خواندن/نوشتن",accR:"فقط خواندن",accW:"فقط نوشتن",plcSub:"«آدرس روی سیم» = آدرس شروع جدول + شمارهٔ رجیستر (صفرمبنا، مثل Modbus Poll). «آدرس PLC» همان شماره به شکل یک‌مبنا (۰۰۰۰۱، ۱۰۰۰۱، ۳۰۰۰۱، ۴۰۰۰۱) است که در بسیاری از نرم‌افزارهای PLC و HMI وارد می‌شود. اگر PLC شما یک خانه جابه‌جا می‌خواند، آدرس شروع را ۱ بگذارید.",mbBaseTitle:"آدرس شروع جدول‌ها (سازگاری با PLC)",mbBaseSub:"بعضی PLC یا HMI آدرس را از ۱ می‌شمارند یا فقط در بازهٔ مشخصی می‌خوانند. آدرس شروع هر جدول را اینجا بدهید؛ نقشهٔ برد روی همان بازه می‌نشیند. اگر هاب شما (نه PLC) با برد کار می‌کند، همه را ۰ نگه دارید.",preset:"الگوی آماده",presetStd:"استاندارد: شروع از ۰",presetOne:"شروع از ۱ (برخی PLC و HMI)",presetCustom:"سفارشی",baseCoil:"شروع Coil (رله‌ها)",baseDiscrete:"شروع Discrete (ورودی‌ها)",baseInput:"شروع Input (وضعیت)",baseHolding:"شروع Holding",lenient:"تحمل خواندن بلوکی خارج از نقشه",lenientSub:"اگر PLC یک‌جا بلوکی را می‌خواند که فقط بخشی از آن در نقشهٔ برد است، بخش خارج را صفر جواب بده (به جای خطای 02). اگر کل درخواست خارج از نقشه باشد، باز هم خطا برمی‌گردد.",
+wordSwap:"ترتیب کلمه: اول کلمهٔ پایین (Low word first)",wordSwapSub:"برای عددهای ۳۲ بیتی (زمان کارکرد، دفعات کار رله). پیش‌فرض: اول کلمهٔ بالا.",table:"جدول",addrCol:"آدرس روی سیم",meaning:"کاربرد",lossTitle:"قطع ارتباط",lossSub:"اگر در این مدت پیامی از سرور یا Master نرسد، این اقدام یک بار انجام می‌شود. صفر = غیرفعال.",lossTimeout:"مهلت (ثانیه)",lossAction:"اقدام",lHold:"حفظ وضعیت فعلی",lOff:"خاموش کردن همهٔ رله‌ها",lPreset:"وضعیت از پیش تعیین شده",
 walk:"تست ترتیبی",identify:"شناسایی (چشمک LED)",onCount:"روشن",inputs:"ورودی‌ها",inputsSub:"زنده",dipAddress:"آدرس دیپ‌سوئیچ",relaySet:"تنظیمات رله‌ها",minInterval:"فاصلهٔ حداقل هر رله (ms)",stagger:"فاصلهٔ روشن شدن کویل‌ها (ms)",name:"نام",powerOn:"پس از وصل برق",interlock:"اینترلاک با",pRestore:"آخرین وضعیت",pOff:"خاموش",pOn:"روشن",none:"—",
 pulse:"پالس",sec:"ثانیه",notFitted:"رزرو (GPIO12)",cycles:"دفعات",
 general:"عمومی",devName:"نام دستگاه",newAdmin:"رمز جدید مدیر (خالی = بدون تغییر)",apPass:"رمز وای‌فای پیکربندی (خالی = بدون تغییر)",logLevel:"سطح گزارش سریال",lvE:"فقط خطا",lvW:"هشدار",lvI:"اطلاعات",lvD:"اشکال‌زدایی",
@@ -485,8 +499,9 @@ testWifi:"Test Wi-Fi",servers:"Servers",serversSub:"Tried in order; the next one
 apiUrl:"Hub HTTP address (local key, rules, updates)",localEnabled:"Local control over the home Wi-Fi (internet down)",otaEnabled:"Accept firmware updates from the platform",localCtl:"Local control",offRules:"Offline rules",keyOk:"Key received",keyNone:"No key",deviceId:"Device ID",telemetryS:"Status period (s)",
 srvEnabled:"Enabled",srvName:"Name",proto:"Protocol",pPlatform:"TiTiSwitch platform",pGeneric:"Generic MQTT",host:"Server address",port:"Port",tls:"Secure (TLS)",user:"Username",clientId:"Client ID (empty = automatic)",prefix:"Topic prefix",base:"Base topic",keepalive:"Keepalive (s)",qos:"QoS",test:"Test",up:"Up",
 caTitle:"Custom CA certificate (optional)",caSub:"For a server with a private certificate. Empty = the built-in public CAs.",saveCa:"Save certificate",caSet:"Certificate set",caNone:"Built-in CAs",
-mbTitle:"Modbus RTU settings",addrFromDip:"Address from DIP switch (AD1..AD7)",manualAddr:"Manual address (1..247)",baud:"Baud rate",parity:"Parity",pNone:"None",pEven:"Even",pOdd:"Odd",stopBits:"Stop bits",respDelay:"Response delay (ms)",swap:"Swap RX / TX",swapSub:"If the board does not answer and the wiring is right, turn this on (TX=GPIO17, RX=GPIO16).",
-regMap:"Register map",plcCol:"PLC address",accessCol:"Access",accRW:"Read/write",accR:"Read only",accW:"Write only",plcSub:"\"Address\" is 0-based (as in Modbus Poll); \"PLC address\" is the 1-based number used by Siemens, Delta and most HMIs.",wordSwap:"Word order: low word first",wordSwapSub:"For 32-bit values (uptime, relay cycles). Default: high word first.",table:"Table",addrCol:"Address",meaning:"Meaning",lossTitle:"Link loss",lossSub:"When nothing arrives from the server or the master for this long, this action runs once. 0 = off.",lossTimeout:"Timeout (s)",lossAction:"Action",lHold:"Keep outputs",lOff:"All relays OFF",lPreset:"Preset outputs",
+mbTitle:"Modbus RTU settings",addrFromDip:"Address from DIP switch (AD1..AD7)",manualAddr:"Manual address (1..247)",baud:"Baud rate",parity:"Parity",pNone:"None",pEven:"Even",pOdd:"Odd",stopBits:"Stop bits",respDelay:"Response delay (ms)",swap:"Swap RX / TX",swapSub:"If the board does not answer and the wiring is right, turn this on (TX=GPIO16, RX=GPIO17).",
+regMap:"Register map",plcCol:"PLC address",accessCol:"Access",accRW:"Read/write",accR:"Read only",accW:"Write only",plcSub:"\"Wire address\" = the table start address + the register number (0-based, as in Modbus Poll). \"PLC address\" is the same number in the 1-based form (00001, 10001, 30001, 40001) that many PLC tools and HMIs use. If your PLC reads one register off, set the start address to 1.",mbBaseTitle:"Table start addresses (PLC compatibility)",mbBaseSub:"Some PLCs or HMIs count addresses from 1, or only read inside a fixed range. Give each table's start address here; the board's map then sits on that range. If a hub (not a PLC) works with the board, keep all of them 0.",preset:"Preset",presetStd:"Standard: start at 0",presetOne:"Start at 1 (some PLCs and HMIs)",presetCustom:"Custom",baseCoil:"Coil start (relays)",baseDiscrete:"Discrete start (inputs)",baseInput:"Input start (status)",baseHolding:"Holding start",lenient:"Tolerate block reads outside the map",lenientSub:"When a PLC reads a block of which only part is in the board's map, answer the part outside with zeros (instead of exception 02). A request entirely outside the map still gets the exception.",
+wordSwap:"Word order: low word first",wordSwapSub:"For 32-bit values (uptime, relay cycles). Default: high word first.",table:"Table",addrCol:"Wire address",meaning:"Meaning",lossTitle:"Link loss",lossSub:"When nothing arrives from the server or the master for this long, this action runs once. 0 = off.",lossTimeout:"Timeout (s)",lossAction:"Action",lHold:"Keep outputs",lOff:"All relays OFF",lPreset:"Preset outputs",
 walk:"Walk test",identify:"Identify (blink LEDs)",onCount:"On",inputs:"Inputs",inputsSub:"live",dipAddress:"DIP address",relaySet:"Relay settings",minInterval:"Minimum interval per relay (ms)",stagger:"Coil stagger (ms)",name:"Name",powerOn:"After power-up",interlock:"Interlock with",pRestore:"Last state",pOff:"OFF",pOn:"ON",none:"—",
 pulse:"Pulse",sec:"s",notFitted:"Reserved (GPIO12)",cycles:"Cycles",
 general:"General",devName:"Device name",newAdmin:"New admin password (empty = keep)",apPass:"Config Wi-Fi password (empty = keep)",logLevel:"Serial log level",lvE:"Errors only",lvW:"Warnings",lvI:"Info",lvD:"Debug",
@@ -555,7 +570,7 @@ function setP(o,p,v){const ks=p.split(".");let a=o;for(let i=0;i<ks.length-1;i++
 function fill(){
   $$("[data-k]").forEach(e=>{const v=getP(S,e.dataset.k);
     if(e.type==="checkbox")e.checked=!!v;else if(e.dataset.secret)e.value=v||"";else e.value=v==null?"":v});
-  secretHints();modeUi();dipUi();
+  secretHints();modeUi();dipUi();presetUi();
 }
 function secretHints(){$$("[data-secret]").forEach(e=>{const f=e.dataset.secret;const set=f==="1"?true:S&&getP(S,f);e.placeholder=set?t("savedPass"):""})}
 function onInput(e){
@@ -566,6 +581,7 @@ function onInput(e){
   setP(S,k,v);dirty();
   if(k==="wifi.dhcp")modeUi();if(k==="mb.fromDip")dipUi();if(k==="link.action")buildPreset();
   if(k.startsWith("servers."))refreshSrvHead();
+  if(k.startsWith("mb.base")){presetUi();buildRegs()}
 }
 function dirty(){$("#savebar").classList.toggle("show",JSON.stringify(S)!==S0)}
 async function save(){
@@ -579,6 +595,8 @@ function modeUi(){
   $("#nomode").classList.toggle("hide",S.mode===1||S.mode===2);$("#lossCard").classList.toggle("hide",!S.mode);
   $("#staticIp").classList.toggle("hide",!!S.wifi.dhcp);
 }
+// preset of the start addresses: all 0 = standard, all 1 = devices that count from 1, else custom
+function presetUi(){const b=(S&&S.mb&&S.mb.base)||[0,0,0,0];$("#mbPreset").value=b.every(x=>x===0)?"0":b.every(x=>x===1)?"1":"c"}
 function dipUi(){$("#manAddr").classList.toggle("hide",!!S.mb.fromDip);$("#dipAddr").classList.toggle("hide",!S.mb.fromDip)}
 /* ---------- servers ---------- */
 function field(lbl,key,type,extra){const l=el("label","f");l.appendChild(el("span",null,t(lbl)));let i;
@@ -635,7 +653,7 @@ async function scan(fresh){
 function buildRelays(){
   const box=$("#relays");box.innerHTML="";const mini=$("#dmini");mini.innerHTML="";
   for(let i=0;i<8;i++){
-    const fitted=S?S.relays.items[i].fitted:i<7;const name=S?S.relays.items[i].name:"Relay "+(i+1);
+    const fitted=S?S.relays.items[i].fitted:true;const name=S?S.relays.items[i].name:"Relay "+(i+1);
     const c=el("div","rl"+(fitted?"":" na"));c.id="rl"+i;
     const top=el("div","top");const nb=el("div");nb.appendChild(el("div","nm",name));nb.appendChild(el("div","no","K"+(i+1)+(i<2?" · NO/NC":" · NO")));top.appendChild(nb);
     if(!fitted)top.appendChild(el("span","badge",t("notFitted")));else{const st=el("span","st",t("off"));top.appendChild(st)}
@@ -674,7 +692,8 @@ function buildPreset(){
     b.onclick=()=>{S.link.mask^=1<<i;buildPreset();dirty()};box.appendChild(b)}
 }
 function buildRegs(){
-  // [table, first, last, access (rw|r|w), fa, en]; PLC address = table base + address + 1
+  // [table, first, last, access (rw|r|w), fa, en]; wire address = start address of the table + number;
+  // PLC number = prefix (0 / 1 / 3 / 4 x 10000) + wire address + 1
   const R=[["Coil",0,7,"rw","رله ۱ تا ۸ (FC1/5/15)","Relays 1..8 (FC1/5/15)"],
     ["Discrete",0,6,"r","دیپ AD1..AD7 (FC2)","DIP AD1..AD7 (FC2)"],["Discrete",7,7,"r","کلید کانفیگ","Config switch"],
     ["Holding",0,0,"rw","ماسک رله‌ها (بیت ۰ = رله ۱)","Relay mask (bit 0 = relay 1)"],["Holding",1,1,"w","۱ = همه خاموش، ۲ = شناسایی","1 = all OFF, 2 = identify"],
@@ -683,12 +702,15 @@ function buildRegs(){
     ["Input",4,5,"r","زمان کارکرد (۳۲ بیتی)","Uptime (32-bit)"],["Input",6,7,"r","فریم سالم / خطای CRC","Good frames / CRC errors"],
     ["Input",8,9,"r","تعداد بوت / حالت ایمن","Boot count / safe mode"],["Input",10,25,"r","دفعات کار رله‌ها (۳۲ بیتی)","Relay cycles (32-bit)"]];
   const base={Coil:0,Discrete:10000,Input:30000,Holding:40000};
+  const bi={Coil:0,Discrete:1,Input:2,Holding:3};
+  const sb=(S&&S.mb&&S.mb.base)||[0,0,0,0];
   const acc={rw:t("accRW"),r:t("accR"),w:t("accW")};
   const p5=n=>String(n).padStart(5,"0");
   const tb=$("#regs");tb.innerHTML="";
   for(const r of R){const tr=el("tr");tr.appendChild(el("td",null,r[0]));
-    const c=el("td");c.appendChild(el("code",null,r[1]===r[2]?String(r[1]):r[1]+".."+r[2]));tr.appendChild(c);
-    const b=base[r[0]],c2=el("td");c2.appendChild(el("code",null,r[1]===r[2]?p5(b+r[1]+1):p5(b+r[1]+1)+".."+p5(b+r[2]+1)));tr.appendChild(c2);
+    const w1=sb[bi[r[0]]]+r[1],w2=sb[bi[r[0]]]+r[2];
+    const c=el("td");c.appendChild(el("code",null,w1===w2?String(w1):w1+".."+w2));tr.appendChild(c);
+    const b=base[r[0]],c2=el("td");c2.appendChild(el("code",null,w1===w2?p5(b+w1+1):p5(b+w1+1)+".."+p5(b+w2+1)));tr.appendChild(c2);
     tr.appendChild(el("td",null,acc[r[3]]));tr.appendChild(el("td",null,lang==="fa"?r[4]:r[5]));tb.appendChild(tr)}
 }
 /* ---------- live state ---------- */
@@ -785,6 +807,7 @@ $("#save").onclick=save;$("#discard").onclick=discard;$("#scanBtn").onclick=()=>
 $("#wtest").onclick=async()=>{if(JSON.stringify(S)!==S0){toast(t("saveFirst"),"bad");return}await api("/api/action",{do:"wifiTest"});toast(t("testing")+"…")};
 $("#walk").onclick=()=>api("/api/action",{do:ST.walk>=0?"walkStop":"walk"});$("#ident").onclick=()=>api("/api/action",{do:"identify"});
 $("#lblShow").onclick=()=>{codeShown=!codeShown;renderLabel()};$("#lblPrint").onclick=()=>window.print();$("#lblSave").onclick=saveLabel;
+$("#mbPreset").onchange=e=>{const v=e.target.value;if(v==="c"||!S)return;S.mb.base=[+v,+v,+v,+v];fill();buildRegs();dirty()};
 $("#otaBtn").onclick=ota;$("#bkBtn").onclick=backup;$("#rsFile").onchange=e=>{if(e.target.files[0])restoreFile(e.target.files[0])};$("#facBtn").onclick=factoryDlg;
 $("#caSave").onclick=async()=>{try{await api("/api/ca",{pem:$("#ca").value.trim()});toast(t("saved"),"ok");$("#caState").textContent=t($("#ca").value.trim()?"caSet":"caNone")}catch(e){toast(t("invalid")+"CA","bad")}};
 $("#logPause").onclick=()=>{logPaused=!logPaused;$("#logPause").textContent=t(logPaused?"resume":"pause")};$("#logClear").onclick=()=>{$("#log").innerHTML=""};

@@ -1,31 +1,58 @@
-#include "modbus.h"
+// =====================================================================================
+//  modbus.cpp — Modbus RTU Slave روی RS-485
+// =====================================================================================
+//
+//  برد در نقش Slave است؛ Master می‌تواند PLC، هاب مرکزی یا HMI باشد. Task جداگانه‌ای
+//  فریم‌ها را دریافت و جواب می‌دهد تا کار رله‌ها و منو را معطل نکند.
+//
+//  توابع پشتیبانی‌شده: 1 و 2 (خواندن Coil و Discrete)، 3 و 4 (خواندن Holding و Input)،
+//  5 و 6 (نوشتن یک Coil و یک رجیستر)، 15 و 16 (نوشتن چندتایی)، 8 (Echo). آدرس 0 = Broadcast.
+//
+//  ── نقشهٔ رجیسترها (شماره‌ها «داخلی» هستند؛ آدرس روی سیم = آدرس شروع جدول + شمارهٔ داخلی) ──
+//   Coil     0..7     رله‌های ۱ تا ۸                                      (FC1، FC5، FC15)
+//   Discrete 0..6     دیپ AD1..AD7؛  7 = کلید کانفیگ                         (FC2)
+//   Holding  0        ماسک رله‌ها (بیت ۰ = رله ۱)                            (FC3، FC6، FC16)
+//            1        فرمان: 1 = همه خاموش، 2 = شناسایی (چراغ‌ها ۱۰ ثانیه چشمک)
+//            2..9     پالس رله ۱ تا ۸ (مقدار × ۰٫۱ ثانیه؛ نوشتن، پالس را شروع می‌کند)
+//            10..19   رزرو (خطای 02)
+//            20..27   هر رله یک رجیستر: 0 = خاموش، 1 = روشن (برای PLC بدون دسترسی به Coil)
+//   Input    0        ماسک رله‌ها در این لحظه                                (FC4)
+//            1 دیپ خام، 2 آدرس Slave، 3 نسخهٔ Firmware (major<<8 | minor)
+//            4..5     زمان کارکرد (ثانیه، ۳۲ بیتی)
+//            6, 7     فریم سالم، خطای CRC
+//            8, 9     تعداد بوت، حالت ایمن
+//            10..25   دفعات وصل شدن هر رله (۳۲ بیتی برای هر رله)
+//
+//  ── سازگاری با PLCهای مختلف ──
+//   «آدرس شروع» هر جدول در منو قابل تنظیم است (Settings::mbBase). بعضی PLC یا HMI آدرس را از ۱
+//   می‌شمارند یا فقط در بازهٔ مشخصی می‌خوانند؛ با آدرس شروع، نقشهٔ برد روی همان بازه می‌نشیند.
+//   «حالت تحمل‌کننده» (mbLenient): وقتی PLC یک‌جا بلوکی را می‌خواند که فقط بخشی از آن در نقشه است،
+//   بخش خارج از نقشه با صفر جواب داده می‌شود (به جای خطای 02). اگر کل درخواست خارج از نقشه باشد،
+//   باز هم خطای 02 برمی‌گردد تا آدرس اشتباه دیده شود.
+// =====================================================================================
 #include <esp_task_wdt.h>
-#include "board.h"
-#include "health.h"
-#include "inputs.h"
-#include "leds.h"
-#include "log.h"
-#include "relays.h"
-#include "settings.h"
+#include "core.h"
 
 namespace modbus {
 namespace {
-constexpr uint8_t HOLDING_COUNT = 28;
-constexpr uint8_t RELAY_REGS = 20;      // holding 20..27: one register per relay (0/1)
-constexpr uint8_t INPUT_COUNT = 26;
-constexpr uint8_t EX_FUNCTION = 1, EX_ADDRESS = 2, EX_VALUE = 3;
+// کدهای خطای Modbus
+constexpr uint8_t EX_FUNCTION = 1;   // تابع پشتیبانی نمی‌شود
+constexpr uint8_t EX_ADDRESS = 2;    // آدرس خارج از نقشه
+constexpr uint8_t EX_VALUE = 3;      // مقدار یا تعداد نامعتبر
 
-HardwareSerial& port = Serial2;
+HardwareSerial& port = Serial2;      // UART2؛ پایه‌ها در config.h
 TaskHandle_t task = nullptr;
 volatile bool running = false;
-uint8_t addr = 0;
-uint32_t silenceUs = 1750;
-uint8_t buf[256];
+uint8_t addr = 0;                    // آدرس Slave (0 = نامعتبر)
+uint32_t silenceUs = 1750;           // سکوت پایان فریم (t3.5) به میکروثانیه
+uint8_t buf[MB_FRAME_MAX];           // فریم در حال دریافت
 uint16_t len = 0;
 uint32_t lastByteUs = 0;
-bool discard = false;              // skip until the line is quiet (frame for someone else)
-volatile uint32_t lastValid = 0;
-uint32_t good = 0, crcErr = 0;   // statistics only
+bool discard = false;                // تا سکوت خط، بایت‌ها را دور بریز (فریم برای Slave دیگر)
+volatile uint32_t lastValid = 0;     // millis() آخرین فریم معتبر برای ما
+uint32_t good = 0, crcErr = 0;       // فقط آمار
+
+// ── ابزارهای پروتکل ────────────────────────────────────────────────────────────────
 
 uint16_t crc16(const uint8_t* p, uint16_t n) {
   uint16_t c = 0xFFFF;
@@ -38,6 +65,7 @@ uint16_t crc16(const uint8_t* p, uint16_t n) {
 
 uint16_t be16(const uint8_t* p) { return (uint16_t)p[0] << 8 | p[1]; }
 
+// ارسال جواب: CRC اضافه می‌شود، DE/RE روی ارسال می‌رود، پس از خروج آخرین بیت به دریافت برمی‌گردد.
 void send(uint8_t* out, uint16_t n) {
   uint16_t c = crc16(out, n);
   out[n++] = c & 0xFF;
@@ -45,9 +73,9 @@ void send(uint8_t* out, uint16_t n) {
   if (settings::cur.mbRespDelayMs) vTaskDelay(pdMS_TO_TICKS(settings::cur.mbRespDelayMs));
   digitalWrite(PIN_RS485_SE, HIGH);
   port.write(out, n);
-  port.flush();                                  // waits until the last stop bit is out
+  port.flush();                                  // صبر می‌کند تا آخرین بیت واقعاً خارج شود
   digitalWrite(PIN_RS485_SE, LOW);
-  while (port.available()) port.read();          // anything seen while driving the line
+  while (port.available()) port.read();          // هر چه هنگام ارسال روی خط دیده شد (پژواک) دور ریخته شود
   leds::data();
 }
 
@@ -56,26 +84,54 @@ void exception(uint8_t fn, uint8_t code) {
   send(out, 3);
 }
 
-bool readBit(uint8_t table, uint16_t a) {
-  if (table == 1) return (relays::state() >> a) & 1;
-  return (inputs::raw() >> a) & 1;
+// ── نگاشت آدرس روی سیم به شمارهٔ داخلی ─────────────────────────────────────────────────
+
+uint32_t baseOf(uint8_t table) { return settings::cur.mbBase[table]; }
+
+// درخواست [a, a+q) نسبت به جدول [base, base+طول) کجا قرار می‌گیرد؟
+//   FIT_FULL    : کاملاً داخل نقشه (حالت عادی)
+//   FIT_PARTIAL : بخشی داخل نقشه و حالت تحمل‌کننده روشن است (بخش خارج صفر خوانده یا نادیده گرفته می‌شود)
+//   FIT_NONE    : هیچ اشتراکی با نقشه ندارد، یا بخشی خارج است و حالت تحمل‌کننده خاموش ← خطای 02
+enum Fit : uint8_t { FIT_NONE, FIT_PARTIAL, FIT_FULL };
+
+Fit fit(uint8_t table, uint16_t a, uint16_t q) {
+  uint32_t lo = baseOf(table), hi = lo + MB_TABLE_LEN[table];
+  uint32_t s = a, e = s + q;
+  if (s >= lo && e <= hi) return FIT_FULL;
+  if (e <= lo || s >= hi) return FIT_NONE;
+  return settings::cur.mbLenient ? FIT_PARTIAL : FIT_NONE;
 }
 
-uint16_t holding(uint16_t a) {
-  if (a == 0) return relays::state();
-  if (a >= RELAY_REGS && a < RELAY_REGS + RELAY_COUNT) return (relays::state() >> (a - RELAY_REGS)) & 1;
-  return 0;
+// شمارهٔ داخلی یک آدرس روی سیم؛ -1 اگر خارج از نقشه
+int idxOf(uint8_t table, uint32_t wire) {
+  uint32_t lo = baseOf(table);
+  if (wire < lo || wire >= lo + MB_TABLE_LEN[table]) return -1;
+  return (int)(wire - lo);
 }
 
-// The two registers of a 32-bit value: high word first, or low word first (mbWordSwap).
+// ── مقدارهای جدول‌ها (شمارهٔ داخلی) ───────────────────────────────────────────────────
+
+bool readBit(uint8_t table, uint16_t idx) {
+  if (table == MB_T_COIL) return (relays::state() >> idx) & 1;
+  return (inputs::raw() >> idx) & 1;               // Discrete: دیپ و کلید کانفیگ
+}
+
+uint16_t holding(uint16_t idx) {
+  if (idx == 0) return relays::state();
+  if (idx >= MB_RELAY_REGS_START && idx < MB_RELAY_REGS_START + RELAY_COUNT)
+    return (relays::state() >> (idx - MB_RELAY_REGS_START)) & 1;
+  return 0;                                        // فرمان‌ها و پالس‌ها خوانده نمی‌شوند (فقط نوشتنی)
+}
+
+// یک مقدار ۳۲ بیتی در دو رجیستر: پیش‌فرض اول کلمهٔ بالا؛ با mbWordSwap اول کلمهٔ پایین.
 uint16_t word32(uint32_t v, bool first) {
   bool high = first != settings::cur.mbWordSwap;
   return high ? v >> 16 : v & 0xFFFF;
 }
 
-uint16_t inputReg(uint16_t a) {
+uint16_t inputReg(uint16_t idx) {
   uint32_t up = millis() / 1000;
-  switch (a) {
+  switch (idx) {
     case 0: return relays::state();
     case 1: return inputs::raw();
     case 2: return addr;
@@ -87,112 +143,129 @@ uint16_t inputReg(uint16_t a) {
     case 8: return health::bootCount() & 0xFFFF;
     case 9: return health::safeMode();
   }
-  if (a >= 10 && a < 26) {
-    uint32_t c = relays::cycles((a - 10) / 2);
-    return word32(c, ((a - 10) & 1) == 0);
+  if (idx >= 10 && idx < 26) {                     // دفعات وصل شدن رله‌ها: هر رله دو رجیستر
+    uint32_t c = relays::cycles((idx - 10) / 2);
+    return word32(c, ((idx - 10) & 1) == 0);
   }
   return 0;
 }
 
-// 0 = done, else the Modbus exception code.
-uint8_t writeHolding(uint16_t a, uint16_t v) {
-  if (a == 0) {
+// نوشتن یک رجیستر Holding (شمارهٔ داخلی). 0 = انجام شد، وگرنه کد خطای Modbus.
+uint8_t writeHolding(uint16_t idx, uint16_t v) {
+  if (idx == 0) {                                  // ماسک همه رله‌ها
     if (v > 0xFF) return EX_VALUE;
     relays::setMask(v, relays::SRC_MODBUS);
-  } else if (a == 1) {
+  } else if (idx == 1) {                           // فرمان
     if (v == 1) relays::allOff(relays::SRC_MODBUS, false);
     else if (v == 2) leds::identify(10000);
     else if (v != 0) return EX_VALUE;
-  } else if (a >= 2 && a < 2 + RELAY_COUNT) {
-    uint8_t r = a - 2;
+  } else if (idx >= 2 && idx < 2 + RELAY_COUNT) {  // پالس: مقدار × ۰٫۱ ثانیه (صفر = خاموش)
+    uint8_t r = idx - 2;
     if (v) relays::set(r, true, relays::SRC_MODBUS, (uint32_t)v * 100);
     else relays::set(r, false, relays::SRC_MODBUS);
-  } else if (a >= RELAY_REGS && a < RELAY_REGS + RELAY_COUNT) {
-    if (v > 1) return EX_VALUE;
-    relays::set(a - RELAY_REGS, v == 1, relays::SRC_MODBUS);
+  } else if (idx >= MB_RELAY_REGS_START && idx < MB_RELAY_REGS_START + RELAY_COUNT) {
+    if (v > 1) return EX_VALUE;                    // هر رله یک رجیستر: فقط 0 یا 1
+    relays::set(idx - MB_RELAY_REGS_START, v == 1, relays::SRC_MODBUS);
   } else {
-    return EX_ADDRESS;                          // 10..19 reserved
+    return EX_ADDRESS;                             // 10..19 رزرو
   }
   return 0;
 }
 
+// ── اجرای یک درخواست ────────────────────────────────────────────────────────────────────
+// f = فریم کامل بدون CRC معتبر شده، broadcast = آدرس 0 (بدون جواب).
 void handle(const uint8_t* f, uint16_t n, bool broadcast) {
   uint8_t fn = f[1];
-  uint8_t out[256];
+  uint8_t out[MB_FRAME_MAX];
   out[0] = addr;
   out[1] = fn;
+  bool lenient = settings::cur.mbLenient;
   switch (fn) {
     case 1:
-    case 2: {                                     // read coils / discrete inputs
+    case 2: {                                      // خواندن Coil / Discrete
+      uint8_t t = fn == 1 ? MB_T_COIL : MB_T_DISCRETE;
       uint16_t a = be16(f + 2), q = be16(f + 4);
       if (broadcast) return;
       if (q < 1 || q > 2000) return exception(fn, EX_VALUE);
-      if (a + q > 8) return exception(fn, EX_ADDRESS);
+      if (fit(t, a, q) == FIT_NONE) return exception(fn, EX_ADDRESS);
       uint8_t bytes = (q + 7) / 8;
       out[2] = bytes;
       memset(out + 3, 0, bytes);
-      for (uint16_t i = 0; i < q; i++)
-        if (readBit(fn, a + i)) out[3 + i / 8] |= 1 << (i % 8);
+      for (uint16_t i = 0; i < q; i++) {
+        int idx = idxOf(t, (uint32_t)a + i);       // خارج از نقشه (فقط حالت تحمل‌کننده) = 0
+        if (idx >= 0 && readBit(t, idx)) out[3 + i / 8] |= 1 << (i % 8);
+      }
       return send(out, 3 + bytes);
     }
     case 3:
-    case 4: {                                     // read holding / input registers
+    case 4: {                                      // خواندن Holding / Input
+      uint8_t t = fn == 3 ? MB_T_HOLDING : MB_T_INPUT;
       uint16_t a = be16(f + 2), q = be16(f + 4);
       if (broadcast) return;
       if (q < 1 || q > 125) return exception(fn, EX_VALUE);
-      if (a + q > (fn == 3 ? HOLDING_COUNT : INPUT_COUNT)) return exception(fn, EX_ADDRESS);
+      if (fit(t, a, q) == FIT_NONE) return exception(fn, EX_ADDRESS);
       out[2] = q * 2;
       for (uint16_t i = 0; i < q; i++) {
-        uint16_t v = fn == 3 ? holding(a + i) : inputReg(a + i);
+        int idx = idxOf(t, (uint32_t)a + i);
+        uint16_t v = idx < 0 ? 0 : (fn == 3 ? holding(idx) : inputReg(idx));
         out[3 + i * 2] = v >> 8;
         out[4 + i * 2] = v & 0xFF;
       }
       return send(out, 3 + q * 2);
     }
-    case 5: {                                     // write single coil
+    case 5: {                                      // نوشتن یک Coil (رله)
       uint16_t a = be16(f + 2), v = be16(f + 4);
       if (v != 0xFF00 && v != 0x0000) return broadcast ? void() : exception(fn, EX_VALUE);
-      if (a >= RELAY_COUNT) return broadcast ? void() : exception(fn, EX_ADDRESS);
-      relays::set(a, v == 0xFF00, relays::SRC_MODBUS);
+      int idx = idxOf(MB_T_COIL, a);
+      if (idx < 0) return broadcast ? void() : exception(fn, EX_ADDRESS);
+      relays::set(idx, v == 0xFF00, relays::SRC_MODBUS);
       if (broadcast) return;
       memcpy(out, f, 6);
       return send(out, 6);
     }
-    case 6: {                                     // write single register
+    case 6: {                                      // نوشتن یک رجیستر Holding
       uint16_t a = be16(f + 2), v = be16(f + 4);
-      if (a >= HOLDING_COUNT) return broadcast ? void() : exception(fn, EX_ADDRESS);
-      if (uint8_t ex = writeHolding(a, v)) return broadcast ? void() : exception(fn, ex);
+      int idx = idxOf(MB_T_HOLDING, a);
+      if (idx < 0) return broadcast ? void() : exception(fn, EX_ADDRESS);
+      if (uint8_t ex = writeHolding(idx, v)) return broadcast ? void() : exception(fn, ex);
       if (broadcast) return;
       memcpy(out, f, 6);
       return send(out, 6);
     }
-    case 15: {                                    // write multiple coils
+    case 15: {                                     // نوشتن چند Coil
       uint16_t a = be16(f + 2), q = be16(f + 4);
       uint8_t bc = f[6];
       if (q < 1 || q > 1968 || bc != (q + 7) / 8) return broadcast ? void() : exception(fn, EX_VALUE);
-      if (a + q > RELAY_COUNT) return broadcast ? void() : exception(fn, EX_ADDRESS);
-      if (a == 0 && q == RELAY_COUNT) {
-        relays::setMask(f[7], relays::SRC_MODBUS);     // all eight in one go (interlock-aware)
+      if (fit(MB_T_COIL, a, q) == FIT_NONE) return broadcast ? void() : exception(fn, EX_ADDRESS);
+      if (a == baseOf(MB_T_COIL) && q == RELAY_COUNT) {
+        relays::setMask(f[7], relays::SRC_MODBUS);   // هر ۸ رله یک‌جا (با رعایت اینترلاک)
       } else {
-        for (uint16_t i = 0; i < q; i++)
-          relays::set(a + i, (f[7 + i / 8] >> (i % 8)) & 1, relays::SRC_MODBUS);
+        for (uint16_t i = 0; i < q; i++) {
+          int idx = idxOf(MB_T_COIL, (uint32_t)a + i);
+          if (idx >= 0) relays::set(idx, (f[7 + i / 8] >> (i % 8)) & 1, relays::SRC_MODBUS);
+        }
       }
       if (broadcast) return;
       memcpy(out, f, 6);
       return send(out, 6);
     }
-    case 16: {                                    // write multiple registers
+    case 16: {                                     // نوشتن چند رجیستر Holding
       uint16_t a = be16(f + 2), q = be16(f + 4);
       uint8_t bc = f[6];
       if (q < 1 || q > 123 || bc != q * 2) return broadcast ? void() : exception(fn, EX_VALUE);
-      if (a + q > HOLDING_COUNT) return broadcast ? void() : exception(fn, EX_ADDRESS);
-      for (uint16_t i = 0; i < q; i++)
-        if (uint8_t ex = writeHolding(a + i, be16(f + 7 + i * 2))) return broadcast ? void() : exception(fn, ex);
+      if (fit(MB_T_HOLDING, a, q) == FIT_NONE) return broadcast ? void() : exception(fn, EX_ADDRESS);
+      for (uint16_t i = 0; i < q; i++) {
+        int idx = idxOf(MB_T_HOLDING, (uint32_t)a + i);
+        if (idx < 0) continue;                     // بخش خارج از نقشه (فقط حالت تحمل‌کننده): نادیده
+        uint8_t ex = writeHolding(idx, be16(f + 7 + i * 2));
+        if (ex == EX_ADDRESS && lenient) continue; // رجیسترهای رزرو در بلوک بزرگ: نادیده
+        if (ex) return broadcast ? void() : exception(fn, ex);
+      }
       if (broadcast) return;
       memcpy(out, f, 6);
       return send(out, 6);
     }
-    case 8: {                                     // diagnostics, sub-function 0 = echo
+    case 8: {                                      // تشخیصی: زیرتابع 0 = Echo
       if (broadcast) return;
       if (be16(f + 2) != 0) return exception(fn, EX_FUNCTION);
       memcpy(out, f, n - 2);
@@ -203,7 +276,9 @@ void handle(const uint8_t* f, uint16_t n, bool broadcast) {
   }
 }
 
-// Bytes a request needs (0 = not known yet).
+// ── دریافت فریم ────────────────────────────────────────────────────────────────────────
+
+// طول مورد نیاز درخواست با توجه به تابع؛ 0 = هنوز معلوم نیست
 uint16_t expected() {
   if (len < 2) return 0;
   switch (buf[1]) {
@@ -213,6 +288,7 @@ uint16_t expected() {
   }
 }
 
+// فریم کامل شد: CRC بررسی و اجرا می‌شود
 void frame() {
   if (len < 4) { len = 0; return; }
   uint16_t c = crc16(buf, len - 2);
@@ -220,7 +296,7 @@ void frame() {
     crcErr++;
     LOGD("modbus", "CRC error (%u bytes)", len);
     len = 0;
-    discard = true;
+    discard = true;                                // تا سکوت خط ادامهٔ فریم خراب را نخوان
     return;
   }
   bool broadcast = buf[0] == 0;
@@ -231,12 +307,13 @@ void frame() {
   len = 0;
 }
 
+// Task اصلی مدباس: بایت‌ها را جمع می‌کند و با سکوت t3.5 یا رسیدن طول مورد انتظار، فریم را کامل می‌داند.
 void taskMain(void*) {
   health::watchThisTask();
   bool warnedAddr = false;
   while (running) {
     health::feed();
-    addr = settings::modbusAddress();
+    addr = settings::modbusAddress();              // دیپ‌سوئیچ هر لحظه قابل تغییر است
     if (addr == 0 && !warnedAddr) {
       LOGE("modbus", "invalid slave address 0: set DIP AD1..AD7 (or a manual address)");
       warnedAddr = true;
@@ -248,17 +325,17 @@ void taskMain(void*) {
       uint8_t b = port.read();
       now = micros();
       if (discard) { lastByteUs = now; continue; }
-      if (len == 0 && b != addr && b != 0) { discard = true; lastByteUs = now; continue; }
+      if (len == 0 && b != addr && b != 0) { discard = true; lastByteUs = now; continue; }  // فریم Slave دیگر
       if (len < sizeof buf) buf[len++] = b;
       lastByteUs = now;
       uint16_t want = expected();
       if (want && len >= want) {
         if (addr) frame(); else len = 0;
-        discard = true;                      // anything after a complete frame waits for silence
+        discard = true;                            // هر چه بعد از فریم کامل آمد تا سکوت نادیده
       }
     }
     if (now - lastByteUs >= silenceUs) {
-      if (len && !discard && addr) frame();  // unknown function code: let CRC decide
+      if (len && !discard && addr) frame();        // تابع ناشناخته: CRC تصمیم می‌گیرد
       len = 0;
       discard = false;
     }
@@ -269,6 +346,7 @@ void taskMain(void*) {
   vTaskDelete(nullptr);
 }
 
+// قالب سریال (۸ بیت داده + Parity + Stop) از تنظیمات
 uint32_t serialConfig() {
   const Settings& s = settings::cur;
   bool two = s.mbStopBits == 2;
@@ -283,20 +361,23 @@ uint32_t serialConfig() {
 void begin() {
   const Settings& s = settings::cur;
   pinMode(PIN_RS485_SE, OUTPUT);
-  digitalWrite(PIN_RS485_SE, LOW);              // receive
+  digitalWrite(PIN_RS485_SE, LOW);                 // پیش‌فرض: حالت دریافت
   int8_t rxPin = s.mbSwapRxTx ? PIN_RS485_TX : PIN_RS485_RX;
   int8_t txPin = s.mbSwapRxTx ? PIN_RS485_RX : PIN_RS485_TX;
-  port.setRxBufferSize(512);
+  port.setRxBufferSize(MB_UART_RX_BUFFER);
   port.begin(s.mbBaud, serialConfig(), rxPin, txPin);
-  port.setRxFIFOFull(1);                         // every byte reaches us at once (gap timing)
+  port.setRxFIFOFull(1);                           // هر بایت بلافاصله به برنامه برسد (برای اندازه‌گیری فاصلهٔ فریم)
+  // سکوت پایان فریم = ۳٫۵ کاراکتر (۱۱ بیت) برای سرعت‌های تا ۱۹۲۰۰؛ بالاتر از آن مقدار ثابت ۱۷۵۰µs
   silenceUs = s.mbBaud <= 19200 ? 38500000UL / s.mbBaud : 1750;
-  if (silenceUs < 2000) silenceUs = 2000;        // 1 ms task tick: keep margin
+  if (silenceUs < 2000) silenceUs = 2000;          // تیک Task یک میلی‌ثانیه است: کمی حاشیه
   addr = settings::modbusAddress();
   running = true;
-  xTaskCreatePinnedToCore(taskMain, "modbus", 4096, nullptr, 3, &task, 1);
+  xTaskCreatePinnedToCore(taskMain, "modbus", MB_TASK_STACK, nullptr, MB_TASK_PRIORITY, &task, 1);
   const char* par[] = {"N", "E", "O"};
-  LOGI("modbus", "RTU slave %u, %lu 8%s%u, RX GPIO%d TX GPIO%d", addr, (unsigned long)s.mbBaud,
-       par[s.mbParity], s.mbStopBits, rxPin, txPin);
+  LOGI("modbus", "RTU slave %u, %lu 8%s%u, RX GPIO%d TX GPIO%d, bases C%u D%u I%u H%u%s", addr,
+       (unsigned long)s.mbBaud, par[s.mbParity], s.mbStopBits, rxPin, txPin, s.mbBase[MB_T_COIL],
+       s.mbBase[MB_T_DISCRETE], s.mbBase[MB_T_INPUT], s.mbBase[MB_T_HOLDING],
+       s.mbLenient ? ", lenient" : "");
 }
 
 void stop() {

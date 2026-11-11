@@ -1,20 +1,24 @@
-#include "relays.h"
+// =====================================================================================
+//  relays.cpp — رله‌ها
+// =====================================================================================
+//
+//  همهٔ تغییرهای رله، از هر منبع (منو، MQTT، Modbus، کنترل محلی، قواعد آفلاین، قطع ارتباط)
+//  و از هر Task، فقط از طریق post() وارد یک صف می‌شود. حلقهٔ اصلی (loop) صف را خالی و اجرا می‌کند:
+//    - حداقل فاصلهٔ دو تغییر هر رله (حفاظت کنتاکت)      → Settings::minIntervalMs
+//    - فاصلهٔ وصل شدن دو کویل (کم‌کردن جریان هجومی)    → Settings::staggerMs
+//    - اینترلاک: دو رلهٔ شریک هیچ‌وقت هم‌زمان وصل نمی‌شوند (اول رلهٔ شریک قطع می‌شود)
+//    - پالس: رله بعد از مدت مشخص خودش خاموش می‌شود (درب‌بازکن، زنگ)
+//    - ذخیرهٔ وضعیت در NVS برای بازگشت پس از قطع برق (با محافظت از فرسایش فلش؛ config.h)
+//  فرمان‌هایی که شناسه (id) دارند، پس از رسیدن رله به وضعیت هدف «انجام شد» و در غیر این صورت
+//  «ناموفق» (اینترلاک، رلهٔ نصب‌نشده، جایگزین شدن با فرمان تازه‌تر) به سرور گزارش می‌شوند.
+// =====================================================================================
 #include <Preferences.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
-#include "log.h"
-#include "settings.h"
+#include "core.h"
 
 namespace relays {
 namespace {
-constexpr uint32_t CYCLES_SAVE_MS = 10UL * 60 * 1000;
-// Flash wear: a state is stored once it has held this long, and not more often than every
-// STATE_MIN_GAP_MS. A cycling timer (1 s on / 1 s off for weeks) would otherwise write NVS tens
-// of thousands of times a day. The cost: a change in the last few seconds before a power cut
-// is not restored.
-constexpr uint32_t STATE_STABLE_MS = 3000;
-constexpr uint32_t STATE_MIN_GAP_MS = 10000;
-
 QueueHandle_t queue = nullptr;
 ResultFn resultFn = nullptr;
 
@@ -54,24 +58,25 @@ void drive(uint8_t r, bool on) {
   changeCount++;
 }
 
+// ذخیرهٔ وضعیت رله‌ها و شمارندهٔ دفعات وصل شدن در NVS، با رعایت محدودیت‌های فرسایش فلش.
 void persist() {
-  // A relay in a pulse is stored OFF: after a power cut it must not stay on.
+  // رله‌ای که در حال پالس است «خاموش» ذخیره می‌شود: پس از قطع برق نباید روشن بماند.
   uint8_t v = cur & ~pulsing();
   uint32_t now = millis();
-  if (v != persisted && prefsOk && now - lastAnyChange >= STATE_STABLE_MS &&
-      (lastPersist == 0 || now - lastPersist >= STATE_MIN_GAP_MS)) {
+  if (v != persisted && prefsOk && now - lastAnyChange >= RELAY_STATE_STABLE_MS &&
+      (lastPersist == 0 || now - lastPersist >= RELAY_STATE_MIN_GAP_MS)) {
     prefs.putUChar("st", v);
     persisted = v;
     lastPersist = now ? now : 1;
   }
-  if (cyclesDirty && prefsOk && millis() - cyclesSavedAt >= CYCLES_SAVE_MS) {
+  if (cyclesDirty && prefsOk && millis() - cyclesSavedAt >= RELAY_CYCLES_SAVE_MS) {
     prefs.putBytes("cyc", cycleCount, sizeof cycleCount);
     cyclesDirty = false;
     cyclesSavedAt = millis();
   }
 }
 
-// Interlock: the partner must be off (now and as target) before this relay may go on.
+// اینترلاک: رلهٔ شریک باید (هم اکنون و هم در وضعیت هدف) خاموش باشد تا این رله وصل شود.
 bool interlocked(uint8_t r, uint8_t targetMask) {
   uint8_t p = settings::cur.interlock[r];
   if (!p) return false;
@@ -86,6 +91,8 @@ void supersede(uint8_t r) {
   }
 }
 
+// اجرای یک فرمان از صف: فقط «وضعیت هدف» (want) را عوض می‌کند. وصل و قطع واقعی را apply()
+// با رعایت زمان‌بندی انجام می‌دهد.
 void handle(const Cmd& c) {
   switch (c.op) {
     case OP_SET: {
@@ -140,6 +147,8 @@ void handle(const Cmd& c) {
   }
 }
 
+// وضعیت واقعی رله‌ها را به وضعیت هدف می‌رساند.
+// اول قطع‌ها انجام می‌شود (تا رلهٔ شریک اینترلاک آزاد شود) و بعد وصل‌ها، هر بار یک کویل.
 void apply() {
   uint32_t now = millis();
   const Settings& s = settings::cur;
@@ -173,8 +182,10 @@ void apply() {
 }
 }  // namespace
 
+// راه‌اندازی: پایه‌ها ابتدا LOW می‌شوند (پیش از OUTPUT شدن) تا رله‌ها لحظه‌ای هم نپرند.
+// وضعیت اولیه از حالت «پس از وصل برق» هر رله و آخرین وضعیت ذخیره‌شده می‌آید؛ در حالت ایمن همه خاموش.
 void begin(bool safeMode) {
-  queue = xQueueCreate(24, sizeof(Cmd));
+  queue = xQueueCreate(RELAY_QUEUE_LEN, sizeof(Cmd));
   for (uint8_t r = 0; r < RELAY_COUNT; r++) {
     if (!fitted(r)) continue;
     digitalWrite(RELAY_PINS[r], LOW);
@@ -208,7 +219,7 @@ void begin(bool safeMode) {
 
 void loop() {
   Cmd c;
-  for (uint8_t n = 0; n < 16 && xQueueReceive(queue, &c, 0) == pdTRUE; n++) handle(c);
+  for (uint8_t n = 0; n < RELAY_CMDS_PER_LOOP && xQueueReceive(queue, &c, 0) == pdTRUE; n++) handle(c);
   uint32_t now = millis();
   for (uint8_t r = 0; r < RELAY_COUNT; r++) {
     if (pulseUntil[r] && (cur & (1 << r)) && (int32_t)(now - pulseUntil[r]) >= 0) {

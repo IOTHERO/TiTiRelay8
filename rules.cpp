@@ -1,19 +1,28 @@
-#include "rules.h"
+// =====================================================================================
+//  rules.cpp — قواعد آفلاین
+// =====================================================================================
+//
+//  سرور برای هر دستگاه قواعدی را می‌فرستد که فقط به خود همان دستگاه مربوط است (زمان‌بندی،
+//  تکرار دوره‌ای، شرط روی مقدار). برد آخرین مجموعه را در NVS نگه می‌دارد و «فقط وقتی سرور
+//  به مدت offline_after_s (معمولاً ۶۰ ثانیه) در دسترس نبوده» اجرا می‌کند؛ وقتی ارتباط برقرار
+//  است سرور خودش اجرا می‌کند و هیچ قاعده‌ای دوبار اجرا نمی‌شود.
+//
+//  پشتیبانی‌شده:
+//    ماشه (trigger) : time (ساعت مشخص)، interval (هر N دقیقه)، value (شرط روی مقدار، با for_s)
+//    شرط و پنجره    : conditions (روی رله‌های خود برد) و window (روز و ساعت)
+//    کار (action)   : write (رله روشن/خاموش) و delay (انتظار)
+//  روزها به تقویم جلالی هستند (۰ = شنبه) و تعطیلات از سرور می‌آید، دقیقاً مثل سرور.
+//  ساعت از NTP یا از server_time داخل پیام گرفته می‌شود. هر کاری که قاعده کرد، در local_log
+//  ثبت می‌شود تا پس از اتصال به سرور گزارش شود.
+// =====================================================================================
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <sys/time.h>
 #include <time.h>
-#include "board.h"
-#include "local.h"
-#include "log.h"
-#include "net.h"
-#include "relays.h"
+#include "core.h"
 
 namespace rules {
 namespace {
-constexpr size_t MAX_RULES_JSON = 12 * 1024;
-constexpr uint8_t MAX_RUNS = 8;
-
 SemaphoreHandle_t mtx = nullptr;
 JsonDocument* doc = nullptr;        // the current rules message
 volatile bool fresh = false;
@@ -24,13 +33,14 @@ uint32_t offlineAfterMs = 60000;
 uint32_t lastReachable = 0;
 int32_t lastMinute = -1;
 uint8_t lastValues = 0;
-uint32_t valueSince[32] = {0};      // value triggers held since (for_s), per rule
-bool valueFired[32] = {false};
+uint32_t valueSince[RULES_MAX_COUNT] = {0};      // value triggers held since (for_s), per rule
+bool valueFired[RULES_MAX_COUNT] = {false};
 
 struct Run { int16_t rule; uint8_t step; uint32_t at; };
-Run runs[MAX_RUNS];
+Run runs[RULES_MAX_RUNS];
 
-// --- Jalali calendar (hub/jalali.py) ---------------------------------------------------------
+// --- تقویم جلالی (همان الگوریتم hub/jalali.py در مخزن هاب) --------------------------------
+// تاریخ میلادی را به جلالی تبدیل می‌کند؛ برای «روز هفته»، «ماه»، «روز ماه» و بازهٔ تاریخ قواعد.
 void toJalali(int gy, int gm, int gd, int& jy, int& jm, int& jd) {
   static const int gdm[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
   long gy2 = gm > 2 ? gy + 1 : gy;
@@ -69,6 +79,8 @@ bool inList(JsonVariantConst list, int v) {
   return false;
 }
 
+// آیا امروز با تقویم قاعده (روز هفته، ماه، روز ماه، بازهٔ تاریخ، تعطیلی) می‌خواند؟
+// holidays: "any" = فرقی ندارد، "skip" = در تعطیلی اجرا نشود، "only" = فقط در تعطیلی.
 bool dayOk(JsonObjectConst c, const Day& d) {
   if (!inList(c["weekdays"], d.weekday)) return false;
   if (!inList(c["months"], d.jm)) return false;
@@ -90,7 +102,7 @@ bool between(JsonVariantConst b, int minute) {
   return s <= e ? (minute >= s && minute < e) : (minute >= s || minute < e);
 }
 
-// The module's own values by tag key.
+// مقدار فعلی یک تگ از خود برد (relay_1..relay_8 و uptime_s) برای شرط‌ها.
 bool valueOf(const char* tag, JsonDocument& out) {
   if (!strncmp(tag, "relay_", 6)) {
     int r = atoi(tag + 6) - 1;
@@ -141,7 +153,7 @@ void start(int idx, const char* why) {
   }
 }
 
-// Steps through each running rule: writes now, delays wait.
+// کارهای قاعده‌های در حال اجرا را پیش می‌برد: write همان لحظه، delay تا زمان مقرر منتظر می‌ماند.
 void step() {
   uint32_t now = millis();
   for (Run& r : runs) {
@@ -204,7 +216,7 @@ void begin() {
   Preferences p;
   if (!p.begin("rules", true)) return;
   size_t len = p.getBytesLength("j");
-  if (len && len <= MAX_RULES_JSON) {
+  if (len && len <= RULES_MAX_JSON_BYTES) {
     char* buf = (char*)malloc(len + 1);
     if (buf) {
       p.getBytes("j", buf, len);
@@ -220,7 +232,7 @@ void begin() {
 }
 
 void apply(const char* json, size_t len) {
-  if (len > MAX_RULES_JSON) { LOGW("rules", "rules message too large"); return; }
+  if (len > RULES_MAX_JSON_BYTES) { LOGW("rules", "rules message too large"); return; }
   auto* d = new JsonDocument;
   if (deserializeJson(*d, json, len) || strcmp((*d)["type"] | "", "rules") != 0) {
     delete d;
@@ -257,6 +269,8 @@ void apply(const char* json, size_t len) {
   xSemaphoreGive(mtx);
 }
 
+// هر دور حلقه: اگر سرور به مدت offline_after_s در دسترس نبوده باشد، ماشه‌ها بررسی و قواعد اجرا می‌شوند.
+// ماشه‌های زمانی فقط یک بار در هر دقیقه بررسی می‌شوند؛ ماشهٔ مقدار وقتی مقدار عوض شده یا هر دقیقه.
 void loop(bool serverReachable) {
   uint32_t now = millis();
   if (serverReachable || !lastReachable) lastReachable = now ? now : 1;
@@ -275,7 +289,7 @@ void loop(bool serverReachable) {
     uint8_t vals = relays::state();
     bool valuesChanged = vals != lastValues;
     lastValues = vals;
-    for (uint8_t i = 0; i < list.size() && i < 32; i++) {
+    for (uint8_t i = 0; i < list.size() && i < RULES_MAX_COUNT; i++) {
       JsonObjectConst rule = list[i];
       JsonObjectConst tr = rule["trigger"];
       const char* type = tr["type"] | "";

@@ -1,4 +1,17 @@
-#include "local.h"
+// =====================================================================================
+//  local.cpp — کنترل محلی از وای‌فای خانه
+// =====================================================================================
+//
+//  وقتی اینترنت (و سرور) در دسترس نیست ولی گوشی و برد در یک شبکهٔ خانه هستند، اپ فرمان را
+//  مستقیم به برد می‌فرستد. برای اینکه کسی در همان شبکه نتواند فرمان جعلی بدهد:
+//    ۱) کلید محلی (۳۲ بایت) را فقط هاب به برد و به گوشیِ مجاز می‌دهد (پیام config).
+//    ۲) اپ اول یک «nonce» یک‌بارمصرف می‌گیرد (۳۰ ثانیه اعتبار).
+//    ۳) فرمان با امضای HMAC-SHA256 روی «شناسه، nonce، نوع، تگ، مقدار» فرستاده می‌شود؛ فرمان
+//       ضبط‌شده دوباره قابل ارسال نیست و بدون کلید هیچ کاری ممکن نیست.
+//  برد خودش را با mDNS (_titiswitch._tcp) معرفی می‌کند و آنچه محلی انجام شده را بعداً در
+//  local_log به سرور گزارش می‌دهد.
+// =====================================================================================
+#include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
 #include <Preferences.h>
@@ -6,25 +19,15 @@
 #include <mbedtls/base64.h>
 #include <mbedtls/md.h>
 #include <time.h>
-#include "board.h"
-#include "cloud.h"
-#include "log.h"
-#include "net.h"
-#include "relays.h"
-#include "settings.h"
+#include "core.h"
 
 namespace local {
 namespace {
-constexpr uint32_t NONCE_TTL_MS = 30000;
-constexpr uint8_t MAX_NONCES = 16;
-constexpr uint8_t MAX_LOG = 40;
-constexpr size_t MAX_BODY = 1024;
-
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 uint8_t key[32];
 size_t keyLen = 0;
 uint32_t keyVersion = 0;
-uint16_t listenPort = 8080;
+uint16_t listenPort = LOCAL_DEFAULT_PORT;
 volatile bool keyChanged = false;
 
 AsyncWebServer* server = nullptr;
@@ -32,10 +35,10 @@ bool mdnsOn = false;
 String lastIp;
 
 struct Nonce { char v[24]; uint32_t at; };
-Nonce nonces[MAX_NONCES] = {};
+Nonce nonces[LOCAL_MAX_NONCES] = {};
 
 struct LogEntry { uint64_t atMs; uint8_t relay; bool value; char by[24]; };
-LogEntry logRing[MAX_LOG];
+LogEntry logRing[LOCAL_LOG_ENTRIES];
 uint8_t logCount = 0;
 SemaphoreHandle_t logMtx = nullptr;
 
@@ -62,6 +65,8 @@ void b64urlEncode(const uint8_t* in, size_t len, char* out, size_t cap) {
   }
 }
 
+// بررسی امضا: HMAC-SHA256 پیام با کلید محلی، به‌صورت base64url، با مقایسهٔ زمان‌ثابت
+// (تا از طول زمان پاسخ نتوان امضا را حدس زد).
 bool verify(const String& msg, const char* sig) {
   uint8_t k[32];
   size_t kl;
@@ -82,10 +87,11 @@ bool verify(const String& msg, const char* sig) {
   return diff == 0;
 }
 
+// nonce فقط یک بار و تا LOCAL_NONCE_TTL_MS معتبر است؛ بلافاصله پس از مصرف باطل می‌شود.
 bool takeNonce(const char* n) {
   uint32_t now = millis();
   for (Nonce& x : nonces) {
-    if (x.v[0] && now - x.at < NONCE_TTL_MS && !strcmp(x.v, n)) {
+    if (x.v[0] && now - x.at < LOCAL_NONCE_TTL_MS && !strcmp(x.v, n)) {
       x.v[0] = 0;                       // one use only
       return true;
     }
@@ -118,7 +124,7 @@ void values(JsonObject v) {
 
 // Collects a POST body (any content type) into the request's temp object.
 void onBody(AsyncWebServerRequest* r, uint8_t* data, size_t len, size_t index, size_t total) {
-  if (total > MAX_BODY) return;
+  if (total > LOCAL_MAX_BODY) return;
   if (index == 0) {
     r->_tempObject = calloc(total + 1, 1);
   }
@@ -188,7 +194,7 @@ void startServer() {
     uint32_t now = millis();
     Nonce* slot = nullptr;
     for (Nonce& x : nonces) {
-      if (x.v[0] && now - x.at >= NONCE_TTL_MS) x.v[0] = 0;
+      if (x.v[0] && now - x.at >= LOCAL_NONCE_TTL_MS) x.v[0] = 0;
       if (!x.v[0] && !slot) slot = &x;
     }
     if (!slot) return fail(r, 429, "too many open nonces");
@@ -199,7 +205,7 @@ void startServer() {
     JsonDocument d;
     d["device_id"] = settings::cur.deviceId;
     d["nonce"] = slot->v;
-    d["ttl_s"] = NONCE_TTL_MS / 1000;
+    d["ttl_s"] = LOCAL_NONCE_TTL_MS / 1000;
     answer(r, 200, d);
   });
   server->on("/local/v1/command", HTTP_POST, handleCommand, nullptr, onBody);
@@ -230,7 +236,7 @@ void begin() {
   if (p.begin("loc", true)) {
     keyLen = p.getBytes("key", key, sizeof key);
     keyVersion = p.getUInt("ver", 0);
-    listenPort = p.getUShort("port", 8080);
+    listenPort = p.getUShort("port", LOCAL_DEFAULT_PORT);
     p.end();
   }
 }
@@ -248,13 +254,18 @@ void loop() {
   }
 }
 
-void applyConfig(JsonVariantConst l) {
+// پیام config از هاب (از MQTT یا HTTP): {"type":"config","local":{enabled,key,version,port}}.
+// کلید تازه در NVS ذخیره می‌شود؛ nonceهای باز کلید قدیمی باطل می‌شوند. پورت جدید پس از ریست بعدی اعمال می‌شود.
+void applyConfig(const char* json, size_t len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, json, len)) return;
+  JsonVariantConst l = doc["local"];
   if (!l.is<JsonObjectConst>()) return;
   bool enabled = l["enabled"] | false;
   uint8_t k[32];
   size_t kl = enabled ? b64urlDecode(l["key"] | "", k, sizeof k) : 0;
   uint32_t ver = l["version"] | 0;
-  uint16_t prt = l["port"] | 8080;
+  uint16_t prt = l["port"] | LOCAL_DEFAULT_PORT;
   portENTER_CRITICAL(&mux);
   bool same = kl == keyLen && !memcmp(k, key, kl) && ver == keyVersion;
   if (!same) {
@@ -285,10 +296,12 @@ String addr() {
   return privateIp(ip) ? ip.toString() : String();
 }
 
+// ثبت یک تغییر بدون سرور (فرمان محلی یا قاعدهٔ آفلاین). اگر به سرور وصل نیستیم تا اتصال بعدی نگه
+// داشته می‌شود؛ اگر پر شود قدیمی‌ترین حذف می‌شود.
 void log(uint8_t relay, bool value, const char* by) {
   if (!logMtx || xSemaphoreTake(logMtx, pdMS_TO_TICKS(50)) != pdTRUE) return;
-  if (logCount == MAX_LOG) {                      // keep the newest
-    memmove(logRing, logRing + 1, sizeof(LogEntry) * (MAX_LOG - 1));
+  if (logCount == LOCAL_LOG_ENTRIES) {                      // keep the newest
+    memmove(logRing, logRing + 1, sizeof(LogEntry) * (LOCAL_LOG_ENTRIES - 1));
     logCount--;
   }
   LogEntry& e = logRing[logCount++];
@@ -320,7 +333,9 @@ void flushLog() {
     o["value"] = logRing[i].value;
     o["by"] = logRing[i].by;
   }
-  bool sent = cloud::publishKind("local_log", d);
+  String body;
+  serializeJson(d, body);
+  bool sent = cloud::publishKind("local_log", body);
   if (sent) logCount = 0;
   xSemaphoreGive(logMtx);
 }

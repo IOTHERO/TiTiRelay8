@@ -1,32 +1,34 @@
-#include "cloud.h"
+// =====================================================================================
+//  cloud.cpp — اتصال MQTT به سرور (پلتفرم TiTiSwitch یا بروکر عمومی)
+// =====================================================================================
+//
+//  فهرست تاپیک‌ها و قالب پیام‌ها در core.h (بخش cloud) آمده است. نکته‌های مهم این فایل:
+//
+//  ● چند سرور: سرورها به ترتیب امتحان می‌شوند؛ پس از شکست، سرور بعدی. اگر اتصالی که مدتی
+//    پایدار بود قطع شود، اول دوباره همان سرور امتحان می‌شود.
+//  ● تلاش مجدد طبق قرارداد سرور: اولین تلاش بعد از ۰ تا ۱۰ ثانیه تصادفی، بعد دو برابر تا ۵ دقیقه
+//    (±۲۰٪)، تا با برگشت برق هزاران دستگاه هم‌زمان به سرور نچسبند.
+//  ● فرمان تکراری: MQTT با QoS 1 ممکن است یک پیام را دو بار برساند؛ شناسهٔ فرمان‌های اخیر
+//    نگه داشته می‌شود و فرمان تکراری فقط «دوباره جواب داده» می‌شود، نه دوباره اجرا.
+//  ● حد پیام: سرور بیش از ۵ پیام در ثانیه از هر دستگاه را دور می‌ریزد؛ ما حداکثر ۴ می‌فرستیم.
+//  ● TLS: تاریخ گواهی بررسی می‌شود پس تا آماده شدن ساعت (NTP) صبر می‌کنیم. گواهی CA از منو یا
+//    فایل /ca.pem (settings::caPem) می‌آید.
+//  ● هر Callback رویداد MQTT در Task خود کتابخانه اجرا می‌شود؛ فقط کار سبک می‌کنیم و
+//    تغییر رله‌ها را به صف رله‌ها می‌سپاریم.
+// =====================================================================================
 #include <ArduinoJson.h>
 #include <esp_crt_bundle.h>
 #include <mqtt_client.h>
-#include "health.h"
-#include "hubapi.h"
-#include "local.h"
-#include "rules.h"
-#include "inputs.h"
-#include "leds.h"
-#include "log.h"
-#include "net.h"
-#include "relays.h"
-#include "settings.h"
+#include "core.h"
 
 namespace cloud {
 namespace {
-constexpr uint32_t CONNECT_TIMEOUT_MS = 15000;
-constexpr uint32_t FIRST_DELAY_MAX_MS = 10000;   // hub contract: first retry 0..10 s,
-constexpr uint32_t DELAY_CAP_MS = 300000;        // doubling up to 5 min, +-20 %,
-constexpr uint32_t STABLE_MS = 60000;            // reset after a 60 s session
-constexpr uint32_t TELEMETRY_MIN_GAP_MS = 250;     // hub drops > 5 messages/s per device
-constexpr uint8_t SEEN_IDS = 24;                   // a command id is carried out only once
-
 enum State : uint8_t { IDLE, WAIT, CONNECTING, UP };
 State state = IDLE;
 esp_mqtt_client_handle_t client = nullptr;
 int8_t srv = -1;
 uint8_t attempt = 0;
+uint32_t timeWaitStart = 0;
 uint32_t nextAt = 0;
 uint32_t startedAt = 0;
 uint32_t upAt = 0;
@@ -129,12 +131,12 @@ void sendTelemetry() {
 
 // Command ids already seen and how they ended (0 received, 1 done, 2 failed).
 struct Seen { char id[40]; uint8_t status; int8_t relay; bool value; };
-Seen seen[SEEN_IDS] = {};
+Seen seen[MQTT_SEEN_IDS] = {};
 uint8_t seenNext = 0;
 portMUX_TYPE seenMux = portMUX_INITIALIZER_UNLOCKED;
 
 int findSeen(const char* id) {
-  for (uint8_t i = 0; i < SEEN_IDS; i++) if (seen[i].id[0] && !strcmp(seen[i].id, id)) return i;
+  for (uint8_t i = 0; i < MQTT_SEEN_IDS; i++) if (seen[i].id[0] && !strcmp(seen[i].id, id)) return i;
   return -1;
 }
 
@@ -143,7 +145,7 @@ void remember(const char* id, uint8_t status, int8_t relay, bool value) {
   int i = findSeen(id);
   if (i < 0) {
     i = seenNext;
-    seenNext = (seenNext + 1) % SEEN_IDS;
+    seenNext = (seenNext + 1) % MQTT_SEEN_IDS;
     strlcpy(seen[i].id, id, sizeof seen[i].id);
   }
   seen[i].status = status;
@@ -316,11 +318,10 @@ void onEvent(void*, esp_event_base_t, int32_t id, void* data) {
         onCommand(e->data, e->data_len);
       } else if (topicIs(e, tRules)) {
         rules::apply(e->data, e->data_len);
-      } else if (topicIs(e, tConfig) || topicIs(e, tOta)) {
-        JsonDocument d;
-        if (deserializeJson(d, e->data, e->data_len)) break;
-        if (topicIs(e, tOta)) hubapi::offerOta(d.as<JsonObjectConst>());
-        else if (d["local"].is<JsonObjectConst>()) local::applyConfig(d["local"]);
+      } else if (topicIs(e, tConfig)) {
+        local::applyConfig(e->data, e->data_len);       // کلید کنترل محلی
+      } else if (topicIs(e, tOta)) {
+        hubapi::offerOta(e->data, e->data_len);         // پیشنهاد Firmware تازه
       }
       break;
     default:
@@ -349,10 +350,10 @@ int8_t nextServer(int8_t from) {
 uint32_t retryDelay() {
   uint32_t ms;
   if (attempt == 0) {
-    ms = esp_random() % FIRST_DELAY_MAX_MS;
+    ms = esp_random() % MQTT_RETRY_FIRST_MAX_MS;
   } else {
-    uint32_t base = FIRST_DELAY_MAX_MS << (attempt > 5 ? 5 : attempt - 1);
-    if (base > DELAY_CAP_MS) base = DELAY_CAP_MS;
+    uint32_t base = MQTT_RETRY_FIRST_MAX_MS << (attempt > 5 ? 5 : attempt - 1);
+    if (base > MQTT_RETRY_CAP_MS) base = MQTT_RETRY_CAP_MS;
     ms = base * (80 + esp_random() % 41) / 100;   // +-20 %
   }
   if (attempt < 255) attempt++;
@@ -398,10 +399,10 @@ void startClient() {
   cfg.session.last_will.qos = 1;
   cfg.session.last_will.retain = 1;
   cfg.network.disable_auto_reconnect = true;
-  cfg.network.timeout_ms = 10000;
-  cfg.buffer.size = 12288;             // a rules message can be several KB
-  cfg.buffer.out_size = 2048;
-  cfg.task.stack_size = 6144;
+  cfg.network.timeout_ms = MQTT_NETWORK_TIMEOUT_MS;
+  cfg.buffer.size = MQTT_RX_BUFFER;      // پیام قواعد ممکن است چند کیلوبایت باشد
+  cfg.buffer.out_size = MQTT_TX_BUFFER;
+  cfg.task.stack_size = MQTT_TASK_STACK;
   client = esp_mqtt_client_init(&cfg);
   if (!client) {
     strlcpy(err, "out of memory", sizeof err);
@@ -455,7 +456,18 @@ void loop() {
   }
   switch (state) {
     case WAIT:
-      if ((int32_t)(now - nextAt) >= 0 && srv >= 0) startClient();
+      if ((int32_t)(now - nextAt) >= 0 && srv >= 0) {
+        // TLS تاریخ گواهی را می‌سنجد: تا آماده شدن ساعت (NTP) صبر کن (حداکثر MQTT_TLS_CLOCK_WAIT_MS، بعد باز هم تلاش کن).
+        if (server().tls && !net::timeValid()) {
+          if (!timeWaitStart) {
+            timeWaitStart = now ? now : 1;
+            LOGI("mqtt", "waiting for the clock (TLS needs it)");
+          }
+          if (now - timeWaitStart < MQTT_TLS_CLOCK_WAIT_MS) break;
+        }
+        timeWaitStart = 0;
+        startClient();
+      }
       break;
     case CONNECTING:
       if (evConnected) {
@@ -479,7 +491,7 @@ void loop() {
           hubapi::fetchAll();            // local key and rules after every start / reconnect
           local::flushLog();
         }
-      } else if (evDown || now - startedAt > CONNECT_TIMEOUT_MS) {
+      } else if (evDown || now - startedAt > MQTT_CONNECT_TIMEOUT_MS) {
         if (!evDown) strlcpy(err, "timeout", sizeof err);
         scheduleRetry(false);
       }
@@ -487,12 +499,12 @@ void loop() {
     case UP: {
       if (evDown) {
         downAt = now ? now : 1;
-        scheduleRetry(now - upAt >= STABLE_MS);
+        scheduleRetry(now - upAt >= MQTT_STABLE_MS);
         break;
       }
       uint32_t ch = relays::changes();
       bool changed = ch != lastChanges;
-      if ((changed && now - lastTelemetry >= TELEMETRY_MIN_GAP_MS) ||
+      if ((changed && now - lastTelemetry >= MQTT_TELEMETRY_MIN_GAP_MS) ||
           now - lastTelemetry >= settings::cur.telemetryS * 1000UL) {
         lastChanges = ch;
         sendTelemetry();
@@ -504,6 +516,7 @@ void loop() {
   }
 }
 
+bool configured() { return srv >= 0; }
 bool connected() { return state == UP; }
 int serverIndex() { return state == UP ? srv : -1; }
 const char* lastError() { return err; }
@@ -534,19 +547,18 @@ void test(uint8_t idx) {
 
 String testResult() { return testText; }
 
-// Acks for commands carried out by the main loop.
+// نتیجهٔ فرمان رله که حلقهٔ رله‌ها گزارش می‌دهد («done» یا «failed»)؛ برای فرمان‌های تکراری هم حفظ می‌شود.
 void ackResult(const char* id, bool ok, uint8_t relay, bool value, const char* error) {
   remember(id, ok ? 1 : 2, relay, value);
   sendAck(id, ok ? "done" : "failed", relay, value, error);
 }
 
-bool publishKind(const char* kind, JsonDocument& doc) {
+// پیام d/<id>/<kind> با QoS 1 (مثل ota/status و local_log). فقط به سرور پلتفرم و وقتی وصل هستیم.
+bool publishKind(const char* kind, const String& json) {
   if (state != UP || generic || !client) return false;
   char topic[160];
   snprintf(topic, sizeof topic, "%s%s", tBase, kind);
-  String s;
-  serializeJson(doc, s);
-  bool ok = esp_mqtt_client_publish(client, topic, s.c_str(), 0, 1, false) >= 0;
+  bool ok = esp_mqtt_client_publish(client, topic, json.c_str(), 0, 1, false) >= 0;
   if (ok) leds::data();
   return ok;
 }

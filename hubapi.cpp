@@ -1,20 +1,25 @@
-#include "hubapi.h"
+// =====================================================================================
+//  hubapi.cpp — ارتباط HTTP(S) با هاب (در Task جدا)
+// =====================================================================================
+//
+//  با اعتبارنامهٔ دستگاه (Authorization: Bearer <secret>) سه کار انجام می‌دهد:
+//    ۱) پس از هر اتصال به پلتفرم: GET config (کلید کنترل محلی) و GET rules (قواعد آفلاین)
+//    ۲) آپدیت Firmware: پیشنهاد از MQTT می‌رسد (d/<id>/ota)، تصویر از HTTPS دانلود می‌شود.
+//       اندازه و SHA-256 (و پایان کامل دانلود) بررسی می‌شود و فقط تصویر سالم نصب می‌شود.
+//       نتیجه‌ها: downloading، installed (توسط Firmware جدید پس از ریست گزارش می‌شود)، failed.
+//    ۳) این‌ها در Task جداگانه (کم‌اولویت) اجرا می‌شود تا کندی شبکه رله‌ها را معطل نکند.
+//  نشانی هاب (apiUrl)، گواهی CA و مهلت‌ها: منو و config.h.
+// =====================================================================================
+#include <ArduinoJson.h>
 #include <Preferences.h>
 #include <Update.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
 #include <mbedtls/sha256.h>
-#include "board.h"
-#include "cloud.h"
-#include "health.h"
-#include "local.h"
-#include "log.h"
-#include "rules.h"
-#include "settings.h"
+#include "core.h"
 
 namespace hubapi {
 namespace {
-constexpr size_t MAX_JSON = 16 * 1024;
 enum Job : uint8_t { JOB_FETCH = 1, JOB_OTA = 2 };
 
 QueueHandle_t jobs = nullptr;
@@ -36,14 +41,16 @@ void otaStatus(const char* jobId, const char* status, const char* version, const
   d["status"] = status;
   if (version) d["version"] = version;
   if (error) d["error"] = error;
-  cloud::publishKind("ota/status", d);
+  String body;
+  serializeJson(d, body);
+  cloud::publishKind("ota/status", body);
 }
 
 esp_http_client_handle_t open(const String& path, int& status, int64_t& length) {
   String url = String(settings::cur.apiUrl) + path;
   esp_http_client_config_t c = {};
   c.url = url.c_str();
-  c.timeout_ms = 15000;
+  c.timeout_ms = HUBAPI_TIMEOUT_MS;
   c.buffer_size = 2048;
   c.keep_alive_enable = false;
   if (url.startsWith("https://")) {
@@ -83,7 +90,7 @@ bool getJson(const String& path, String& out) {
     char buf[512];
     int n;
     while ((n = esp_http_client_read(h, buf, sizeof buf)) > 0) {
-      if (out.length() + n > MAX_JSON) { ok = false; break; }
+      if (out.length() + n > HUBAPI_MAX_JSON_BYTES) { ok = false; break; }
       out.concat(buf, n);
     }
   } else {
@@ -96,14 +103,14 @@ bool getJson(const String& path, String& out) {
 void fetch() {
   String base = String("/ingest/v1/devices/") + settings::cur.deviceId;
   String body;
-  if (getJson(base + "/config", body)) {
-    JsonDocument d;
-    if (!deserializeJson(d, body)) local::applyConfig(d["local"]);
-  }
+  if (getJson(base + "/config", body)) local::applyConfig(body.c_str(), body.length());
   body = "";
   if (getJson(base + "/rules", body)) rules::apply(body.c_str(), body.length());
 }
 
+// دانلود و نصب Firmware: SHA-256 هنگام دانلود محاسبه می‌شود و پیش از نهایی کردن با مقدار پیشنهاد
+// مقایسه می‌شود؛ هر ناهماهنگی (اندازه، SHA، قطع شدن دانلود) نصب را لغو می‌کند و برد با Firmware فعلی
+// به کار ادامه می‌دهد. پس از نصب موفق، شناسهٔ کار در NVS می‌ماند تا Firmware جدید «installed» را گزارش کند.
 void runOta() {
   Offer o;
   xSemaphoreTake(offerMtx, portMAX_DELAY);
@@ -177,7 +184,7 @@ void begin() {
   if (jobs) return;
   jobs = xQueueCreate(4, sizeof(uint8_t));
   offerMtx = xSemaphoreCreateMutex();
-  xTaskCreatePinnedToCore(worker, "hubapi", 8192, nullptr, 1, nullptr, 0);
+  xTaskCreatePinnedToCore(worker, "hubapi", HUBAPI_TASK_STACK, nullptr, 1, nullptr, 0);
 }
 
 bool configured() {
@@ -190,7 +197,13 @@ void fetchAll() {
   xQueueSend(jobs, &j, 0);
 }
 
-void offerOta(JsonObjectConst o) {
+// پیشنهاد Firmware از سرور (MQTT): {job_id, version, sha256, size, url}.
+// اگر آپدیت در منو غیرفعال باشد، نسخه همان نسخهٔ فعلی باشد یا آدرس هاب ناقص باشد، بلافاصله جواب داده می‌شود؛
+// وگرنه دانلود در Task کار نوبت می‌گیرد.
+void offerOta(const char* json, size_t len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, json, len)) return;
+  JsonObjectConst o = doc.as<JsonObjectConst>();
   const char* jobId = o["job_id"] | "";
   const char* version = o["version"] | "";
   if (!*jobId) return;

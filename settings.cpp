@@ -1,23 +1,44 @@
-#include "settings.h"
+// =====================================================================================
+//  settings.cpp — ذخیره و بازیابی تنظیمات در حافظهٔ NVS
+// =====================================================================================
+//
+//  ساختار Settings و مقدارهای پیش‌فرض در config.h هستند. این فایل:
+//    - مقدار پیش‌فرض می‌سازد (defaults)، اعتبارسنجی می‌کند (validate)،
+//    - تنظیمات را به صورت «یک بلوک نسخه‌دار» می‌نویسد و می‌خواند (save / load)،
+//    - هویت دستگاه (شناسه و رمز پلتفرم، سرور، وای‌فای اصلی) را جدا هم نگه می‌دارد،
+//    - برچسب محصول و گواهی CA را نگه می‌دارد.
+//
+//  ★ سازگاری با آپدیت: تنظیمات جدید فقط به انتهای struct Settings اضافه می‌شود. load() بلوک
+//    قدیمی‌تر (کوتاه‌تر) را روی مقدارهای پیش‌فرض می‌خواند، پس فیلدهای تازه با پیش‌فرض پر
+//    می‌شوند و تنظیمات قبلی از بین نمی‌رود.
+//  ★ نسخهٔ ۴: آدرس شروع جدول‌های Modbus (mbBase) و حالت mbLenient.
+// =====================================================================================
+#include <LittleFS.h>
 #include <Preferences.h>
-#include <WiFi.h>
 #include <esp_mac.h>
 #include <stddef.h>
-#include "inputs.h"
-#include "log.h"
+#include "core.h"
 
 namespace settings {
 Settings cur;
 
 namespace {
-constexpr uint16_t VERSION = 3;   // bump when fields are appended
-constexpr const char* NS = "cfg";
-constexpr const char* IDENT = "ident";
-// The oldest layout still read: version 2 ended with logLevel.
+constexpr uint16_t VERSION = 4;           // با اضافه شدن فیلد به انتهای Settings یکی بالا ببرید
+constexpr const char* NS = "cfg";         // فضای نام NVS برای بلوک تنظیمات
+constexpr const char* IDENT = "ident";    // فضای نام NVS برای نسخهٔ پشتیبان هویت دستگاه
+// پایان فیلدهای هر نسخهٔ قدیمی‌تر (برای خواندن بلوک ذخیره‌شده با Firmware قبلی):
+//   نسخهٔ ۲ تا logLevel بود (پیش از mbWordSwap)، نسخهٔ ۳ تا mbWordSwap (پیش از mbBase).
 constexpr size_t SIZE_V2 = offsetof(Settings, mbWordSwap);
+constexpr size_t SIZE_V3 = offsetof(Settings, mbBase);
 
-// The production identity (and the link to reach the platform) is also kept in its own keys,
-// apart from the blob: if the blob is ever unreadable the unit still reaches the platform.
+size_t endOf(uint16_t ver) { return ver == 2 ? SIZE_V2 : ver == 3 ? SIZE_V3 : sizeof(Settings); }
+
+// سرعت‌های مجاز مدباس
+const uint32_t BAUDS[] = {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200};
+
+// هویت تولید (شناسه و رمز پلتفرم، آدرس هاب، سرور، وای‌فای اصلی و نوع ارتباط) علاوه بر بلوک
+// اصلی در کلیدهای جدا هم ذخیره می‌شود. اگر بلوک اصلی روزی خراب یا ناخوانا شد، دستگاه باز هم
+// به پلتفرم وصل می‌شود و نیازی به برنامه‌ریزی دوباره نیست.
 void saveIdentity(const Settings& s) {
   Preferences p;
   if (!p.begin(IDENT, false)) return;
@@ -33,7 +54,7 @@ void saveIdentity(const Settings& s) {
   p.end();
 }
 
-// withLink: also the mode and the main Wi-Fi (the blob was lost, not reset on purpose).
+// withLink: نوع ارتباط و وای‌فای اصلی هم برگردانده شود (یعنی بلوک خراب شده، نه اینکه عمداً ریست شده).
 bool restoreIdentity(Settings& s, bool withLink) {
   Preferences p;
   if (!p.begin(IDENT, true)) return false;
@@ -43,6 +64,7 @@ bool restoreIdentity(Settings& s, bool withLink) {
   strlcpy(s.apiUrl, p.getString("api", "").c_str(), sizeof s.apiUrl);
   ServerCfg v;
   if (p.getBytesLength("srv") == sizeof v && p.getBytes("srv", &v, sizeof v) == sizeof v) {
+    // رشته‌ها را حتماً پایان‌دار کن (حتی اگر داده خراب باشد)
     v.name[sizeof v.name - 1] = v.host[sizeof v.host - 1] = v.user[sizeof v.user - 1] = 0;
     v.pass[sizeof v.pass - 1] = v.clientId[sizeof v.clientId - 1] = v.prefix[sizeof v.prefix - 1] = 0;
     s.servers[0] = v;
@@ -60,98 +82,81 @@ bool restoreIdentity(Settings& s, bool withLink) {
   p.end();
   return any;
 }
-const uint32_t BAUDS[] = {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200};
 
+// چهار رقم آخر MAC (برای نام وای‌فای برد و Client ID)
 String macSuffix() {
   uint8_t mac[6];
-  esp_read_mac(mac, ESP_MAC_WIFI_STA);   // valid before Wi-Fi is started
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);   // پیش از روشن شدن Wi-Fi هم معتبر است
   char b[5];
   snprintf(b, sizeof b, "%02X%02X", mac[4], mac[5]);
   return String(b);
 }
-
-void copyStr(char* dst, size_t cap, const char* src) {
-  if (src == nullptr) return;
-  strlcpy(dst, src, cap);
-}
-
-void str(JsonObjectConst in, const char* key, char* dst, size_t cap) {
-  if (in[key].is<const char*>()) copyStr(dst, cap, in[key].as<const char*>());
-}
-
-// Passwords: an empty or missing value keeps the stored one (the portal never receives them).
-void secret(JsonObjectConst in, const char* key, char* dst, size_t cap) {
-  const char* v = in[key] | "";
-  if (*v) copyStr(dst, cap, v);
-}
-
-template <typename T> void num(JsonObjectConst in, const char* key, T& dst) {
-  if (in[key].is<long>()) dst = (T)in[key].as<long>();
-  else if (in[key].is<bool>()) dst = (T)in[key].as<bool>();
-}
-
-void ipFrom(JsonObjectConst in, const char* key, uint32_t& dst) {
-  IPAddress ip;
-  if (in[key].is<const char*>() && ip.fromString(in[key].as<const char*>())) dst = (uint32_t)ip;
-}
-
-String ipStr(uint32_t v) { return IPAddress(v).toString(); }
 
 bool printable(const char* s) {
   for (; *s; s++) if ((uint8_t)*s < 0x20) return false;
   return true;
 }
 
+// تاپیک MQTT نباید علامت‌های wildcard (+ و #) یا کاراکتر کنترلی داشته باشد
 bool topicSafe(const char* s) {
   for (; *s; s++) if (*s == '+' || *s == '#' || (uint8_t)*s < 0x20) return false;
   return true;
 }
 }  // namespace
 
+// -------------------------------------------------------------------------------------
+//  مقدار پیش‌فرض (پس از ریست کارخانه یا برای فیلدهای تازهٔ یک نسخهٔ جدید)
+// -------------------------------------------------------------------------------------
 void defaults(Settings& s) {
   memset(&s, 0, sizeof s);
   s.version = VERSION;
-  copyStr(s.deviceName, sizeof s.deviceName, FW_NAME);
+  strlcpy(s.deviceName, FW_NAME, sizeof s.deviceName);
   s.mode = MODE_UNSET;
   s.dhcp = true;
   s.subnet = (uint32_t)IPAddress(255, 255, 255, 0);
   snprintf(s.hostname, sizeof s.hostname, "titi-r8-%s", macSuffix().c_str());
   for (char* p = s.hostname; *p; p++) *p = tolower(*p);
-  copyStr(s.ntp, sizeof s.ntp, "pool.ntp.org");
+  strlcpy(s.ntp, DEFAULT_NTP_SERVER, sizeof s.ntp);
   for (uint8_t i = 0; i < MAX_SERVERS; i++) {
     ServerCfg& v = s.servers[i];
     v.enabled = false;
     v.proto = PROTO_PLATFORM;
     snprintf(v.name, sizeof v.name, "Server %u", i + 1);
-    v.port = 1883;
-    v.keepalive = 30;
-    v.qos = 1;
+    v.port = DEFAULT_MQTT_PORT;
+    v.keepalive = DEFAULT_MQTT_KEEPALIVE_S;
+    v.qos = DEFAULT_MQTT_QOS;
   }
-  s.telemetryS = 30;
+  s.telemetryS = DEFAULT_TELEMETRY_S;
   s.localEnabled = true;
   s.otaEnabled = true;
   s.mbAddrFromDip = 1;
-  s.mbAddr = 1;
-  s.mbBaud = 9600;
-  s.mbParity = 0;
-  s.mbStopBits = 1;
+  s.mbAddr = DEFAULT_MB_ADDR;
+  s.mbBaud = DEFAULT_MB_BAUD;
+  s.mbParity = DEFAULT_MB_PARITY;
+  s.mbStopBits = DEFAULT_MB_STOP_BITS;
   s.mbRespDelayMs = 0;
   s.mbSwapRxTx = false;
-  s.linkTimeoutS = 0;
+  s.mbWordSwap = false;
+  for (uint8_t t = 0; t < 4; t++) s.mbBase[t] = 0;    // آدرس شروع هر جدول: استاندارد (از صفر)
+  s.mbLenient = false;
+  s.linkTimeoutS = DEFAULT_LINK_TIMEOUT_S;
   s.linkLoss = LOSS_HOLD;
   for (uint8_t i = 0; i < RELAY_COUNT; i++) {
     s.powerOn[i] = PON_RESTORE;
     snprintf(s.relayName[i], sizeof s.relayName[i], "Relay %u", i + 1);
   }
-  s.minIntervalMs = 100;
-  s.staggerMs = 30;
-  copyStr(s.apPass, sizeof s.apPass, "titi1234");
-  copyStr(s.adminPass, sizeof s.adminPass, "admin");
-  s.logLevel = LOG_INFO;
+  s.minIntervalMs = DEFAULT_MIN_INTERVAL_MS;
+  s.staggerMs = DEFAULT_STAGGER_MS;
+  strlcpy(s.apPass, DEFAULT_AP_PASSWORD, sizeof s.apPass);
+  strlcpy(s.adminPass, DEFAULT_ADMIN_PASSWORD, sizeof s.adminPass);
+  s.logLevel = DEFAULT_LOG_LEVEL;
 }
 
+// -------------------------------------------------------------------------------------
+//  اعتبارسنجی: هر مقدار نامعتبر → false و نام فیلد در err (منو آن را به کاربر نشان می‌دهد)
+// -------------------------------------------------------------------------------------
 bool validate(Settings& s, String& err) {
-  // Make every string terminated even if the blob was damaged.
+  // رشته‌ها حتماً پایان‌دار شوند (حتی اگر بلوک ذخیره‌شده خراب باشد)
   s.deviceName[sizeof s.deviceName - 1] = 0;
   s.hostname[sizeof s.hostname - 1] = 0;
   s.deviceId[sizeof s.deviceId - 1] = 0;
@@ -182,31 +187,45 @@ bool validate(Settings& s, String& err) {
     return false;
   }
   size_t au = strlen(s.apiUrl);
-  if (au && s.apiUrl[au - 1] == '/') s.apiUrl[au - 1] = 0;
+  if (au && s.apiUrl[au - 1] == '/') s.apiUrl[au - 1] = 0;     // اسلش انتهای نشانی حذف شود
   if (s.telemetryS < 5 || s.telemetryS > 3600) { err = "telemetryS"; return false; }
+
+  // --- Modbus ---
   bool baudOk = false;
   for (uint32_t b : BAUDS) baudOk |= b == s.mbBaud;
   if (!baudOk) { err = "mb.baud"; return false; }
   if (s.mbAddr < 1 || s.mbAddr > 247) { err = "mb.addr"; return false; }
   if (s.mbParity > 2 || s.mbStopBits < 1 || s.mbStopBits > 2) { err = "mb.format"; return false; }
   if (s.mbRespDelayMs > 500) { err = "mb.respDelay"; return false; }
+  // آدرس شروع هر جدول: آخرین رجیستر جدول هم باید در بازهٔ ۱۶ بیتی (تا 65535) بماند
+  for (uint8_t t = 0; t < 4; t++)
+    if ((uint32_t)s.mbBase[t] + MB_TABLE_LEN[t] > 65536UL) { err = "mb.base"; return false; }
+
   if (s.linkTimeoutS > 3600 || s.linkLoss > LOSS_PRESET) { err = "linkLoss"; return false; }
   for (uint8_t i = 0; i < RELAY_COUNT; i++) {
     s.relayName[i][sizeof s.relayName[i] - 1] = 0;
     if (s.powerOn[i] > PON_ON) { err = "relays.powerOn"; return false; }
     uint8_t p = s.interlock[i];
     if (p > RELAY_COUNT || p == i + 1) { err = "relays.interlock"; return false; }
-    // Interlocks are pairs: the partner must point back.
+    // اینترلاک دوطرفه است: رلهٔ شریک باید به این رله برگردد
     if (p && s.interlock[p - 1] != i + 1) { err = "relays.interlock"; return false; }
   }
   if (s.minIntervalMs > 10000 || s.staggerMs > 1000) { err = "relays.timing"; return false; }
   size_t ap = strlen(s.apPass);
-  if (ap < 8 || ap > 63) { err = "apPass"; return false; }
+  if (ap < 8 || ap > 63) { err = "apPass"; return false; }     // رمز WPA2 باید ۸ تا ۶۳ حرف باشد
   if (strlen(s.adminPass) < 4) { err = "adminPass"; return false; }
   if (s.logLevel > LOG_DEBUG) s.logLevel = LOG_INFO;
   return true;
 }
 
+// -------------------------------------------------------------------------------------
+//  خواندن از حافظه
+//  - بلوکی با همان اندازه یا کوتاه‌تر (از نسخهٔ قدیمی‌تر) روی مقدارهای پیش‌فرض خوانده می‌شود؛
+//    فیلدهای تازه پیش‌فرض می‌مانند.
+//  - بلوک بزرگ‌تر (برنگشتن به Firmware قدیمی‌تر) خوانده نمی‌شود.
+//  - اگر چیزی نبود (بعد از ریست کارخانه): فقط هویت برمی‌گردد. اگر بلوک ناخوانا بود: هویت و
+//    اتصال (نوع ارتباط و وای‌فای) هم از کلیدهای پشتیبان برمی‌گردد.
+// -------------------------------------------------------------------------------------
 void load() {
   defaults(cur);
   Preferences p;
@@ -216,15 +235,22 @@ void load() {
   bool ok = false;
   if (p.begin(NS, true)) {
     n = p.getBytesLength("s");
-    // Same or older layout: read what is stored over the defaults (fields appended later keep
-    // their defaults). A newer layout (a downgrade) is not read.
     if (n >= SIZE_V2 && n <= sizeof(Settings)) {
-      uint16_t ver = 0;
-      ok = p.getBytes("s", tmp, n) == n;
-      ver = tmp->version;
-      ok = ok && ver >= 2 && ver <= VERSION;
-      if (ok && ver < VERSION) LOGI("cfg", "settings from version %u upgraded", ver);
-      tmp->version = VERSION;
+      // بلوک را اول در یک بافر خام می‌خوانیم، سپس فقط «فیلدهای همان نسخه» را روی پیش‌فرض‌ها
+      // کپی می‌کنیم. بایت‌های اضافهٔ انتهای بلوک قدیمی (پدینگ ساختار) هرگز وارد فیلدهای تازه
+      // نمی‌شوند؛ فیلدهای تازه همان پیش‌فرض می‌مانند.
+      uint8_t* raw = (uint8_t*)malloc(n);
+      if (raw && p.getBytes("s", raw, n) == n) {
+        uint16_t ver;
+        memcpy(&ver, raw, sizeof ver);                 // version اولین فیلد ساختار است
+        if (ver >= 2 && ver <= VERSION && n >= endOf(ver)) {
+          memcpy(tmp, raw, endOf(ver) < n ? endOf(ver) : n);
+          if (ver < VERSION) LOGI("cfg", "settings from version %u upgraded", ver);
+          tmp->version = VERSION;
+          ok = true;
+        }
+      }
+      free(raw);
     }
     p.end();
   }
@@ -233,8 +259,7 @@ void load() {
     cur = *tmp;
     LOGI("cfg", "settings loaded");
   } else {
-    // Nothing stored after a factory reset: the identity only. Unreadable: the link too.
-    bool lost = n > 0;
+    bool lost = n > 0;          // بلوکی بود ولی خوانده نشد
     if (lost) LOGE("cfg", "stored settings unreadable (%s)", err.length() ? err.c_str() : "layout");
     if (restoreIdentity(cur, lost)) {
       String e2;
@@ -267,25 +292,35 @@ bool save(const Settings& in) {
   return ok;
 }
 
+// -------------------------------------------------------------------------------------
+//  ریست کارخانه
+//  wipeIdentity=false (ریست مشتری از منو یا با کلید کانفیگ): تنظیمات پاک می‌شود ولی هویت دستگاه،
+//     گواهی CA و برچسب می‌ماند (load() هویت را برمی‌گرداند)؛ وای‌فای مشتری پاک می‌شود.
+//  wipeIdentity=true (کنسول خط تولید): همه‌چیز پاک می‌شود تا برد دوباره برنامه‌ریزی شود.
+// -------------------------------------------------------------------------------------
 void factoryReset(bool wipeIdentity) {
   Preferences p;
   if (p.begin(NS, false)) {
     String ca = p.getString("ca", "");
-    p.clear();                                   // load() then restores the identity only
+    p.clear();
     if (!wipeIdentity && ca.length()) p.putString("ca", ca);
     p.end();
   }
   if (p.begin(IDENT, false)) {
     if (wipeIdentity) p.clear();
-    else { p.remove("net"); p.remove("mode"); }  // the customer's Wi-Fi goes with the reset
+    else { p.remove("net"); p.remove("mode"); }
     p.end();
   }
+  // وضعیت رله‌ها، کلید کنترل محلی، قواعد آفلاین و نتیجهٔ آپدیت
   for (const char* ns : {"rt", "loc", "rules", "ota"})
     if (p.begin(ns, false)) { p.clear(); p.end(); }
   if (wipeIdentity && p.begin("label", false)) { p.clear(); p.end(); }
   LOGW("cfg", wipeIdentity ? "erased, identity included" : "factory reset (identity kept)");
 }
 
+// -------------------------------------------------------------------------------------
+//  برچسب محصول (QR و شمارهٔ سریال از CSV سامانهٔ تولید) — جدا از تنظیمات، پس از ریست می‌ماند
+// -------------------------------------------------------------------------------------
 Label label() {
   Label l;
   Preferences p;
@@ -300,7 +335,7 @@ Label label() {
 bool setLabel(const String& qr, const String& serial) {
   if (qr.length() > 200 || serial.length() > 40) return false;
   if (qr.length() && !qr.startsWith("https://") && !qr.startsWith("http://")) return false;
-  for (char c : qr) if ((uint8_t)c < 0x21) return false;
+  for (char c : qr) if ((uint8_t)c < 0x21) return false;      // فاصله و کاراکتر کنترلی ممنوع
   Preferences p;
   if (!p.begin("label", false)) return false;
   if (qr.length()) p.putString("qr", qr); else p.remove("qr");
@@ -310,11 +345,23 @@ bool setLabel(const String& qr, const String& serial) {
   return true;
 }
 
+// -------------------------------------------------------------------------------------
+//  گواهی CA سرور برای اتصال امن (TLS با CA خصوصی)
+//  اولویت: گواهی واردشده در منو (NVS) ← فایل /ca.pem در LittleFS (داخل Release ساخته می‌شود) ←
+//  (خالی) یعنی گواهی‌های عمومی داخلی ESP32.
+// -------------------------------------------------------------------------------------
 String caPem() {
   Preferences p;
-  if (!p.begin(NS, true)) return String();
-  String v = p.getString("ca", "");
-  p.end();
+  String v;
+  if (p.begin(NS, true)) {
+    v = p.getString("ca", "");
+    p.end();
+  }
+  if (v.length()) return v;
+  if (LittleFS.begin(false) && LittleFS.exists("/ca.pem")) {
+    File f = LittleFS.open("/ca.pem", "r");
+    if (f && f.size() > 0 && f.size() <= 4000) v = f.readString();
+  }
   return v;
 }
 
@@ -330,6 +377,10 @@ bool setCaPem(const String& pem) {
   return ok;
 }
 
+// -------------------------------------------------------------------------------------
+//  توابع کمکی
+// -------------------------------------------------------------------------------------
+// آدرس مؤثر Slave: از دیپ‌سوئیچ (AD1..AD7) یا مقدار دستی. 0 = نامعتبر (برد جواب نمی‌دهد).
 uint8_t modbusAddress() {
   if (!cur.mbAddrFromDip) return cur.mbAddr;
   uint8_t a = inputs::address();
@@ -347,172 +398,9 @@ const char* deviceSecret() {
   return i < 0 ? "" : cur.servers[i].pass;
 }
 
-String apSsid() { return "TiTi-R8-" + macSuffix(); }
+String apSsid() { return String(PORTAL_AP_SSID_PREFIX) + macSuffix(); }
 
 String defaultClientId() {
   return cur.deviceId[0] ? String(cur.deviceId) : String("titi-r8-") + macSuffix();
-}
-
-void toJson(const Settings& s, JsonObject o, bool withSecrets) {
-  o["deviceName"] = s.deviceName;
-  o["mode"] = s.mode;
-  JsonObject w = o["wifi"].to<JsonObject>();
-  JsonArray nets = w["nets"].to<JsonArray>();
-  for (uint8_t i = 0; i < MAX_NETS; i++) {
-    JsonObject n = nets.add<JsonObject>();
-    n["ssid"] = s.nets[i].ssid;
-    n["passSet"] = s.nets[i].pass[0] != 0;
-    if (withSecrets) n["pass"] = s.nets[i].pass;
-  }
-  w["dhcp"] = s.dhcp;
-  w["ip"] = ipStr(s.ip);
-  w["gateway"] = ipStr(s.gateway);
-  w["subnet"] = ipStr(s.subnet);
-  w["dns1"] = ipStr(s.dns1);
-  w["dns2"] = ipStr(s.dns2);
-  w["hostname"] = s.hostname;
-  w["ntp"] = s.ntp;
-  JsonArray sv = o["servers"].to<JsonArray>();
-  for (uint8_t i = 0; i < MAX_SERVERS; i++) {
-    const ServerCfg& v = s.servers[i];
-    JsonObject j = sv.add<JsonObject>();
-    j["enabled"] = v.enabled;
-    j["proto"] = v.proto;
-    j["name"] = v.name;
-    j["host"] = v.host;
-    j["port"] = v.port;
-    j["tls"] = v.tls;
-    j["user"] = v.user;
-    j["passSet"] = v.pass[0] != 0;
-    if (withSecrets) j["pass"] = v.pass;
-    j["clientId"] = v.clientId;
-    j["prefix"] = v.prefix;
-    j["keepalive"] = v.keepalive;
-    j["qos"] = v.qos;
-  }
-  o["deviceId"] = s.deviceId;
-  o["telemetryS"] = s.telemetryS;
-  o["apiUrl"] = s.apiUrl;
-  o["localEnabled"] = s.localEnabled;
-  o["otaEnabled"] = s.otaEnabled;
-  JsonObject m = o["mb"].to<JsonObject>();
-  m["fromDip"] = s.mbAddrFromDip;
-  m["addr"] = s.mbAddr;
-  m["baud"] = s.mbBaud;
-  m["parity"] = s.mbParity;
-  m["stopBits"] = s.mbStopBits;
-  m["respDelayMs"] = s.mbRespDelayMs;
-  m["swap"] = s.mbSwapRxTx;
-  m["wordSwap"] = s.mbWordSwap;
-  JsonObject l = o["link"].to<JsonObject>();
-  l["timeoutS"] = s.linkTimeoutS;
-  l["action"] = s.linkLoss;
-  l["mask"] = s.linkLossMask;
-  JsonObject r = o["relays"].to<JsonObject>();
-  r["minIntervalMs"] = s.minIntervalMs;
-  r["staggerMs"] = s.staggerMs;
-  JsonArray items = r["items"].to<JsonArray>();
-  for (uint8_t i = 0; i < RELAY_COUNT; i++) {
-    JsonObject it = items.add<JsonObject>();
-    it["name"] = s.relayName[i];
-    it["powerOn"] = s.powerOn[i];
-    it["interlock"] = s.interlock[i];
-    it["fitted"] = RELAY_PINS[i] >= 0;
-  }
-  JsonObject sy = o["system"].to<JsonObject>();
-  sy["logLevel"] = s.logLevel;
-  sy["apPassSet"] = true;
-  sy["adminDefault"] = strcmp(s.adminPass, "admin") == 0;
-  if (withSecrets) {
-    sy["apPass"] = s.apPass;
-    sy["adminPass"] = s.adminPass;
-  }
-}
-
-void fromJson(Settings& s, JsonObjectConst o) {
-  str(o, "deviceName", s.deviceName, sizeof s.deviceName);
-  num(o, "mode", s.mode);
-  JsonObjectConst w = o["wifi"];
-  if (w) {
-    JsonArrayConst nets = w["nets"];
-    for (uint8_t i = 0; i < MAX_NETS && i < nets.size(); i++) {
-      JsonObjectConst n = nets[i];
-      if (n["ssid"].is<const char*>()) {
-        const char* ssid = n["ssid"];
-        // A changed or cleared network forgets its old password.
-        if (strcmp(ssid, s.nets[i].ssid) != 0) s.nets[i].pass[0] = 0;
-        copyStr(s.nets[i].ssid, sizeof s.nets[i].ssid, ssid);
-      }
-      secret(n, "pass", s.nets[i].pass, sizeof s.nets[i].pass);
-      if (n["clearPass"] | false) s.nets[i].pass[0] = 0;
-    }
-    num(w, "dhcp", s.dhcp);
-    ipFrom(w, "ip", s.ip);
-    ipFrom(w, "gateway", s.gateway);
-    ipFrom(w, "subnet", s.subnet);
-    ipFrom(w, "dns1", s.dns1);
-    ipFrom(w, "dns2", s.dns2);
-    str(w, "hostname", s.hostname, sizeof s.hostname);
-    str(w, "ntp", s.ntp, sizeof s.ntp);
-  }
-  JsonArrayConst sv = o["servers"];
-  for (uint8_t i = 0; i < MAX_SERVERS && i < sv.size(); i++) {
-    JsonObjectConst j = sv[i];
-    ServerCfg& v = s.servers[i];
-    num(j, "enabled", v.enabled);
-    num(j, "proto", v.proto);
-    str(j, "name", v.name, sizeof v.name);
-    if (j["host"].is<const char*>() && strcmp(j["host"], v.host) != 0) v.pass[0] = 0;
-    str(j, "host", v.host, sizeof v.host);
-    num(j, "port", v.port);
-    num(j, "tls", v.tls);
-    str(j, "user", v.user, sizeof v.user);
-    secret(j, "pass", v.pass, sizeof v.pass);
-    if (j["clearPass"] | false) v.pass[0] = 0;
-    str(j, "clientId", v.clientId, sizeof v.clientId);
-    str(j, "prefix", v.prefix, sizeof v.prefix);
-    num(j, "keepalive", v.keepalive);
-    num(j, "qos", v.qos);
-  }
-  str(o, "deviceId", s.deviceId, sizeof s.deviceId);
-  num(o, "telemetryS", s.telemetryS);
-  str(o, "apiUrl", s.apiUrl, sizeof s.apiUrl);
-  num(o, "localEnabled", s.localEnabled);
-  num(o, "otaEnabled", s.otaEnabled);
-  JsonObjectConst m = o["mb"];
-  if (m) {
-    num(m, "fromDip", s.mbAddrFromDip);
-    num(m, "addr", s.mbAddr);
-    num(m, "baud", s.mbBaud);
-    num(m, "parity", s.mbParity);
-    num(m, "stopBits", s.mbStopBits);
-    num(m, "respDelayMs", s.mbRespDelayMs);
-    num(m, "swap", s.mbSwapRxTx);
-    num(m, "wordSwap", s.mbWordSwap);
-  }
-  JsonObjectConst l = o["link"];
-  if (l) {
-    num(l, "timeoutS", s.linkTimeoutS);
-    num(l, "action", s.linkLoss);
-    num(l, "mask", s.linkLossMask);
-  }
-  JsonObjectConst r = o["relays"];
-  if (r) {
-    num(r, "minIntervalMs", s.minIntervalMs);
-    num(r, "staggerMs", s.staggerMs);
-    JsonArrayConst items = r["items"];
-    for (uint8_t i = 0; i < RELAY_COUNT && i < items.size(); i++) {
-      JsonObjectConst it = items[i];
-      str(it, "name", s.relayName[i], sizeof s.relayName[i]);
-      num(it, "powerOn", s.powerOn[i]);
-      num(it, "interlock", s.interlock[i]);
-    }
-  }
-  JsonObjectConst sy = o["system"];
-  if (sy) {
-    num(sy, "logLevel", s.logLevel);
-    secret(sy, "apPass", s.apPass, sizeof s.apPass);
-    secret(sy, "adminPass", s.adminPass, sizeof s.adminPass);
-  }
 }
 }  // namespace settings

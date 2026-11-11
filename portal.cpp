@@ -1,41 +1,265 @@
-#include "portal.h"
+// =====================================================================================
+//  portal.cpp — منوی تنظیمات (وب)
+// =====================================================================================
+//
+//  وقتی کلید کانفیگ (دیپ ۸) هنگام روشن شدن روشن باشد (یا هنوز هیچ ارتباطی انتخاب نشده)، برد
+//  یک شبکهٔ وای‌فای «TiTi-R8-xxxx» می‌سازد (نشانی 192.168.1.100، رمز در config.h) و منو را نشان می‌دهد.
+//
+//  ● ظاهر منو (data/index.html و data/static/qr.js) روی حافظهٔ LittleFS است و از آنجا خوانده می‌شود.
+//    اگر هنوز بارگذاری نشده باشد، یک صفحهٔ ساده (FALLBACK_HTML) نمایش داده می‌شود که اجازهٔ نصب
+//    تصویر LittleFS را می‌دهد.
+//  ● ورود با رمز مدیر؛ پس از چند بار رمز اشتباه، ورود مدتی قفل می‌شود. هر ورود یک «توکن» می‌دهد که
+//    در هدر X-Auth فرستاده می‌شود.
+//  ● وضعیت زنده (رله‌ها، ورودی‌ها، حافظه، گزارش) با WebSocket هر PORTAL_PUSH_MS به مرورگر می‌رسد.
+//  ● تنظیمات به JSON تبدیل می‌شوند (toJson/fromJson): رمزها هرگز به مرورگر فرستاده نمی‌شوند
+//    (فقط «ثبت شده است»)، و رمز خالی در ذخیره یعنی «بدون تغییر».
+//  ● هر صفحهٔ نشانی ناشناخته به منو هدایت می‌شود (Captive portal)، پس گوشی خودش منو را باز می‌کند.
+//  ● در حالت تنظیمات، وای‌فای ایستگاه و MQTT فقط برای دکمه‌های «تست اتصال» روشن می‌شوند، نه برای کار عادی.
+// =====================================================================================
+#include <ArduinoJson.h>
 #include <AsyncJson.h>
 #include <DNSServer.h>
 #include <ESPAsyncWebServer.h>
 #include <LittleFS.h>
 #include <Update.h>
 #include <WiFi.h>
-#include "health.h"
-#include "inputs.h"
-#include "leds.h"
-#include "local.h"
-#include "rules.h"
-#include "cloud.h"
-#include "log.h"
-#include "net.h"
-#include "relays.h"
-#include "settings.h"
-#include "web_ui.h"
+#include "core.h"
 
 namespace portal {
 namespace {
-constexpr uint8_t MAX_TOKENS = 4;
-constexpr uint32_t TOKEN_TTL_MS = 8UL * 3600 * 1000;
-constexpr uint8_t MAX_FAILS = 5;
-constexpr uint32_t LOCKOUT_MS = 60000;
-constexpr uint32_t PUSH_MS = 400;
-constexpr uint8_t MAX_WS = 4;
+
+// صفحهٔ ساده‌ای که وقتی LittleFS (رابط وب) بارگذاری نشده نمایش داده می‌شود:
+static const char FALLBACK_HTML[] = R"HTML(<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TiTi Relay-8</title><style>body{font-family:Tahoma,system-ui,sans-serif;background:#0a0c11;color:#eef0f6;display:grid;place-items:center;min-height:100vh;margin:0;padding:20px}
+.b{max-width:440px;padding:28px;border:1px solid rgba(255,255,255,.1);border-radius:20px;background:rgba(255,255,255,.04)}h1{color:#d9b46a;font-size:20px}
+p{color:#9aa3b5;line-height:1.8}code{direction:ltr;display:inline-block;background:#000;padding:2px 6px;border-radius:6px}
+input,button{font:inherit;margin-top:10px;width:100%;padding:10px;border-radius:10px;border:1px solid #333;background:#111;color:#eee}button{background:#d9b46a;color:#1a1307;border:0;font-weight:700}</style></head>
+<body><div class="b"><h1>TiTi Relay-8</h1>
+<p>فایل‌های رابط کاربری (LittleFS) روی حافظه نیست. پوشهٔ <code>data</code> را با «Upload LittleFS» در Arduino IDE بارگذاری کنید، یا فایل <code>littlefs.bin</code> را این‌جا نصب کنید.</p>
+<p dir="ltr" style="text-align:left">The web UI (LittleFS) is missing. Upload the <code>data</code> folder with "Upload LittleFS", or install a LittleFS image below.</p>
+<input id="p" type="password" placeholder="admin password"><input id="f" type="file" accept=".bin"><button id="u">Upload filesystem image</button><p id="s"></p></div>
+<script>
+document.getElementById("u").onclick=async()=>{const s=document.getElementById("s");
+const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:document.getElementById("p").value})});
+if(!r.ok){s.textContent="password?";return}const tk=(await r.json()).token;const f=document.getElementById("f").files[0];if(!f)return;
+const fd=new FormData();fd.append("fs",f,f.name);s.textContent="...";
+const x=await fetch("/api/ota?fs=1",{method:"POST",headers:{"X-Auth":tk},body:fd});s.textContent=x.ok?"OK, restarting":"failed";if(x.ok)setTimeout(()=>location.reload(),9000)};
+</script></body></html>
+)HTML";
+
+// ── تبدیل Settings به JSON و برعکس (برای منو) ────────────────────────────────────────
+// مقدارهایی که در JSON نباشند، در Settings بدون تغییر می‌مانند.
+
+void str(JsonObjectConst in, const char* key, char* dst, size_t cap) {
+  if (in[key].is<const char*>()) strlcpy(dst, in[key].as<const char*>(), cap);
+}
+
+// رمزها: مقدار خالی یا غایب = «بدون تغییر» (منو هرگز رمز ذخیره‌شده را نمی‌گیرد).
+void secret(JsonObjectConst in, const char* key, char* dst, size_t cap) {
+  const char* v = in[key] | "";
+  if (*v) strlcpy(dst, v, cap);
+}
+
+template <typename T> void num(JsonObjectConst in, const char* key, T& dst) {
+  if (in[key].is<long>()) dst = (T)in[key].as<long>();
+  else if (in[key].is<bool>()) dst = (T)in[key].as<bool>();
+}
+
+void ipFrom(JsonObjectConst in, const char* key, uint32_t& dst) {
+  IPAddress ip;
+  if (in[key].is<const char*>() && ip.fromString(in[key].as<const char*>())) dst = (uint32_t)ip;
+}
+
+String ipStr(uint32_t v) { return IPAddress(v).toString(); }
+
+// withSecrets=true فقط برای فایل پشتیبان (دانلود با ورود مدیر) است.
+void toJson(const Settings& s, JsonObject o, bool withSecrets) {
+  o["deviceName"] = s.deviceName;
+  o["mode"] = s.mode;
+  JsonObject w = o["wifi"].to<JsonObject>();
+  JsonArray nets = w["nets"].to<JsonArray>();
+  for (uint8_t i = 0; i < MAX_NETS; i++) {
+    JsonObject n = nets.add<JsonObject>();
+    n["ssid"] = s.nets[i].ssid;
+    n["passSet"] = s.nets[i].pass[0] != 0;
+    if (withSecrets) n["pass"] = s.nets[i].pass;
+  }
+  w["dhcp"] = s.dhcp;
+  w["ip"] = ipStr(s.ip);
+  w["gateway"] = ipStr(s.gateway);
+  w["subnet"] = ipStr(s.subnet);
+  w["dns1"] = ipStr(s.dns1);
+  w["dns2"] = ipStr(s.dns2);
+  w["hostname"] = s.hostname;
+  w["ntp"] = s.ntp;
+  JsonArray sv = o["servers"].to<JsonArray>();
+  for (uint8_t i = 0; i < MAX_SERVERS; i++) {
+    const ServerCfg& v = s.servers[i];
+    JsonObject j = sv.add<JsonObject>();
+    j["enabled"] = v.enabled;
+    j["proto"] = v.proto;
+    j["name"] = v.name;
+    j["host"] = v.host;
+    j["port"] = v.port;
+    j["tls"] = v.tls;
+    j["user"] = v.user;
+    j["passSet"] = v.pass[0] != 0;
+    if (withSecrets) j["pass"] = v.pass;
+    j["clientId"] = v.clientId;
+    j["prefix"] = v.prefix;
+    j["keepalive"] = v.keepalive;
+    j["qos"] = v.qos;
+  }
+  o["deviceId"] = s.deviceId;
+  o["telemetryS"] = s.telemetryS;
+  o["apiUrl"] = s.apiUrl;
+  o["localEnabled"] = s.localEnabled;
+  o["otaEnabled"] = s.otaEnabled;
+  JsonObject m = o["mb"].to<JsonObject>();
+  m["fromDip"] = s.mbAddrFromDip;
+  m["addr"] = s.mbAddr;
+  m["baud"] = s.mbBaud;
+  m["parity"] = s.mbParity;
+  m["stopBits"] = s.mbStopBits;
+  m["respDelayMs"] = s.mbRespDelayMs;
+  m["swap"] = s.mbSwapRxTx;
+  m["wordSwap"] = s.mbWordSwap;
+  JsonArray base = m["base"].to<JsonArray>();           // آدرس شروع جدول‌ها: Coil، Discrete، Input، Holding
+  for (uint8_t t = 0; t < 4; t++) base.add(s.mbBase[t]);
+  m["lenient"] = s.mbLenient;
+  JsonObject l = o["link"].to<JsonObject>();
+  l["timeoutS"] = s.linkTimeoutS;
+  l["action"] = s.linkLoss;
+  l["mask"] = s.linkLossMask;
+  JsonObject r = o["relays"].to<JsonObject>();
+  r["minIntervalMs"] = s.minIntervalMs;
+  r["staggerMs"] = s.staggerMs;
+  JsonArray items = r["items"].to<JsonArray>();
+  for (uint8_t i = 0; i < RELAY_COUNT; i++) {
+    JsonObject it = items.add<JsonObject>();
+    it["name"] = s.relayName[i];
+    it["powerOn"] = s.powerOn[i];
+    it["interlock"] = s.interlock[i];
+    it["fitted"] = RELAY_PINS[i] >= 0;
+  }
+  JsonObject sy = o["system"].to<JsonObject>();
+  sy["logLevel"] = s.logLevel;
+  sy["apPassSet"] = true;
+  sy["adminDefault"] = strcmp(s.adminPass, DEFAULT_ADMIN_PASSWORD) == 0;   // منو هشدار می‌دهد رمز پیش‌فرض را عوض کنید
+  if (withSecrets) {
+    sy["apPass"] = s.apPass;
+    sy["adminPass"] = s.adminPass;
+  }
+}
+
+void fromJson(Settings& s, JsonObjectConst o) {
+  str(o, "deviceName", s.deviceName, sizeof s.deviceName);
+  num(o, "mode", s.mode);
+  JsonObjectConst w = o["wifi"];
+  if (w) {
+    JsonArrayConst nets = w["nets"];
+    for (uint8_t i = 0; i < MAX_NETS && i < nets.size(); i++) {
+      JsonObjectConst n = nets[i];
+      if (n["ssid"].is<const char*>()) {
+        const char* ssid = n["ssid"];
+        // شبکه‌ای که عوض یا پاک شود، رمز قبلی‌اش را هم فراموش می‌کند
+        if (strcmp(ssid, s.nets[i].ssid) != 0) s.nets[i].pass[0] = 0;
+        strlcpy(s.nets[i].ssid, ssid, sizeof s.nets[i].ssid);
+      }
+      secret(n, "pass", s.nets[i].pass, sizeof s.nets[i].pass);
+      if (n["clearPass"] | false) s.nets[i].pass[0] = 0;
+    }
+    num(w, "dhcp", s.dhcp);
+    ipFrom(w, "ip", s.ip);
+    ipFrom(w, "gateway", s.gateway);
+    ipFrom(w, "subnet", s.subnet);
+    ipFrom(w, "dns1", s.dns1);
+    ipFrom(w, "dns2", s.dns2);
+    str(w, "hostname", s.hostname, sizeof s.hostname);
+    str(w, "ntp", s.ntp, sizeof s.ntp);
+  }
+  JsonArrayConst sv = o["servers"];
+  for (uint8_t i = 0; i < MAX_SERVERS && i < sv.size(); i++) {
+    JsonObjectConst j = sv[i];
+    ServerCfg& v = s.servers[i];
+    num(j, "enabled", v.enabled);
+    num(j, "proto", v.proto);
+    str(j, "name", v.name, sizeof v.name);
+    if (j["host"].is<const char*>() && strcmp(j["host"], v.host) != 0) v.pass[0] = 0;   // سرور عوض شد: رمز قبلی را نگه نمی‌داریم
+    str(j, "host", v.host, sizeof v.host);
+    num(j, "port", v.port);
+    num(j, "tls", v.tls);
+    str(j, "user", v.user, sizeof v.user);
+    secret(j, "pass", v.pass, sizeof v.pass);
+    if (j["clearPass"] | false) v.pass[0] = 0;
+    str(j, "clientId", v.clientId, sizeof v.clientId);
+    str(j, "prefix", v.prefix, sizeof v.prefix);
+    num(j, "keepalive", v.keepalive);
+    num(j, "qos", v.qos);
+  }
+  str(o, "deviceId", s.deviceId, sizeof s.deviceId);
+  num(o, "telemetryS", s.telemetryS);
+  str(o, "apiUrl", s.apiUrl, sizeof s.apiUrl);
+  num(o, "localEnabled", s.localEnabled);
+  num(o, "otaEnabled", s.otaEnabled);
+  JsonObjectConst m = o["mb"];
+  if (m) {
+    num(m, "fromDip", s.mbAddrFromDip);
+    num(m, "addr", s.mbAddr);
+    num(m, "baud", s.mbBaud);
+    num(m, "parity", s.mbParity);
+    num(m, "stopBits", s.mbStopBits);
+    num(m, "respDelayMs", s.mbRespDelayMs);
+    num(m, "swap", s.mbSwapRxTx);
+    num(m, "wordSwap", s.mbWordSwap);
+    num(m, "lenient", s.mbLenient);
+    JsonArrayConst bs = m["base"];
+    for (uint8_t t = 0; t < 4 && t < bs.size(); t++) {
+      if (!bs[t].is<long>()) continue;
+      long v = bs[t].as<long>();
+      s.mbBase[t] = v < 0 ? 0 : v > 65535 ? 65535 : (uint16_t)v;   // مقدار بزرگ‌تر از ۱۶ بیت را validate رد می‌کند
+    }
+  }
+  JsonObjectConst l = o["link"];
+  if (l) {
+    num(l, "timeoutS", s.linkTimeoutS);
+    num(l, "action", s.linkLoss);
+    num(l, "mask", s.linkLossMask);
+  }
+  JsonObjectConst r = o["relays"];
+  if (r) {
+    num(r, "minIntervalMs", s.minIntervalMs);
+    num(r, "staggerMs", s.staggerMs);
+    JsonArrayConst items = r["items"];
+    for (uint8_t i = 0; i < RELAY_COUNT && i < items.size(); i++) {
+      JsonObjectConst it = items[i];
+      str(it, "name", s.relayName[i], sizeof s.relayName[i]);
+      num(it, "powerOn", s.powerOn[i]);
+      num(it, "interlock", s.interlock[i]);
+    }
+  }
+  JsonObjectConst sy = o["system"];
+  if (sy) {
+    num(sy, "logLevel", s.logLevel);
+    secret(sy, "apPass", s.apPass, sizeof s.apPass);
+    secret(sy, "adminPass", s.adminPass, sizeof s.adminPass);
+  }
+}
+
+// ── وضعیت منو ────────────────────────────────────────────────────────────────────────────
 
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 DNSServer dns;
 IPAddress apIp(PORTAL_IP[0], PORTAL_IP[1], PORTAL_IP[2], PORTAL_IP[3]);
 
+// توکن ورود: رشتهٔ تصادفی ۳۲ حرفی؛ تا PORTAL_MAX_TOKENS نشست هم‌زمان، قدیمی‌ترین جایگزین می‌شود.
 struct Token { char v[33]; uint32_t at; };
-Token tokens[MAX_TOKENS] = {};
+Token tokens[PORTAL_MAX_TOKENS] = {};
 uint8_t fails = 0;
 uint32_t lockedAt = 0;
-uint32_t wsAuthed[MAX_WS] = {0};
+uint32_t wsAuthed[PORTAL_MAX_WS] = {0};
 
 volatile uint32_t restartAt = 0;
 volatile bool startWifiTest = false;
@@ -47,7 +271,7 @@ bool fsOk = false;
 uint32_t lastPush = 0;
 uint32_t lastLogSent = 0;
 
-// Relay walk test: each fitted relay ON for 1 s in turn.
+// «تست ترتیبی» رله‌ها: هر رلهٔ نصب‌شده به نوبت PORTAL_WALK_STEP_MS روشن می‌ماند.
 volatile bool walkStart = false;
 int8_t walkIdx = -1;
 uint32_t walkAt = 0;
@@ -61,7 +285,7 @@ bool tokenOk(const char* t) {
   if (!t || strlen(t) != 32) return false;
   uint32_t now = millis();
   for (Token& k : tokens)
-    if (k.v[0] && now - k.at < TOKEN_TTL_MS && !strcmp(k.v, t)) return true;
+    if (k.v[0] && now - k.at < PORTAL_TOKEN_TTL_MS && !strcmp(k.v, t)) return true;
   return false;
 }
 
@@ -85,7 +309,7 @@ void sendError(AsyncWebServerRequest* r, int code, const char* error, const char
 
 void sendOk(AsyncWebServerRequest* r) { r->send(200, "application/json", "{\"ok\":true}"); }
 
-// Route helper: JSON body + login required.
+// مسیر POST با بدنهٔ JSON که ورود مدیر می‌خواهد (بدون توکن معتبر: خطای 401).
 void jsonRoute(const char* uri, std::function<void(AsyncWebServerRequest*, JsonObjectConst)> fn,
                size_t maxLen = 4096) {
   auto* h = new AsyncCallbackJsonWebHandler(uri, [fn](AsyncWebServerRequest* r, JsonVariant& j) {
@@ -169,8 +393,8 @@ void pushState() {
 }
 
 void routes() {
-  // The UI lives in LittleFS (data/index.html, or index.html.gz); without it a fallback page
-  // that can install a LittleFS image.
+  // ظاهر منو در LittleFS است (data/index.html)؛ در غیر این صورت صفحهٔ ساده‌ای که امکان نصب تصویر
+  // LittleFS را می‌دهد.
   server.on("/", HTTP_GET, [](AsyncWebServerRequest* r) {
     if (fsOk && (LittleFS.exists("/index.html") || LittleFS.exists("/index.html.gz"))) {
       AsyncWebServerResponse* res = r->beginResponse(LittleFS, "/index.html", "text/html");
@@ -192,11 +416,11 @@ void routes() {
 
   auto* login = new AsyncCallbackJsonWebHandler("/api/login", [](AsyncWebServerRequest* r, JsonVariant& j) {
     uint32_t now = millis();
-    if (fails >= MAX_FAILS && now - lockedAt < LOCKOUT_MS) return sendError(r, 429, "locked");
-    if (fails >= MAX_FAILS) fails = 0;
+    if (fails >= PORTAL_MAX_FAILS && now - lockedAt < PORTAL_LOCKOUT_MS) return sendError(r, 429, "locked");
+    if (fails >= PORTAL_MAX_FAILS) fails = 0;
     const char* pass = j["password"] | "";
     if (strcmp(pass, settings::cur.adminPass) != 0) {
-      if (++fails >= MAX_FAILS) lockedAt = now;
+      if (++fails >= PORTAL_MAX_FAILS) lockedAt = now;
       LOGW("portal", "wrong password (%u)", fails);
       return sendError(r, 403, "password");
     }
@@ -208,7 +432,7 @@ void routes() {
     LOGI("portal", "signed in");
     JsonDocument d;
     d["token"] = slot->v;
-    d["adminDefault"] = strcmp(settings::cur.adminPass, "admin") == 0;
+    d["adminDefault"] = strcmp(settings::cur.adminPass, DEFAULT_ADMIN_PASSWORD) == 0;
     sendJson(r, 200, d);
   });
   login->setMethod(HTTP_POST);
@@ -225,14 +449,14 @@ void routes() {
   server.on("/api/settings", HTTP_GET, [](AsyncWebServerRequest* r) {
     if (!authed(r)) return sendError(r, 401, "login");
     JsonDocument d;
-    settings::toJson(settings::cur, d.to<JsonObject>(), false);
+    toJson(settings::cur, d.to<JsonObject>(), false);
     d["caSet"] = settings::caPem().length() > 0;
     sendJson(r, 200, d);
   });
 
   jsonRoute("/api/settings", [](AsyncWebServerRequest* r, JsonObjectConst in) {
     Settings* s = new Settings(settings::cur);
-    settings::fromJson(*s, in);
+    fromJson(*s, in);
     String err;
     if (!settings::validate(*s, err)) {
       delete s;
@@ -247,7 +471,7 @@ void routes() {
   jsonRoute("/api/restore", [](AsyncWebServerRequest* r, JsonObjectConst in) {
     Settings* s = new Settings;
     settings::defaults(*s);
-    settings::fromJson(*s, in);
+    fromJson(*s, in);
     String err;
     bool ok = settings::validate(*s, err) && settings::save(*s);
     delete s;
@@ -257,7 +481,7 @@ void routes() {
   server.on("/api/backup", HTTP_GET, [](AsyncWebServerRequest* r) {
     if (!authed(r)) return sendError(r, 401, "login");
     JsonDocument d;
-    settings::toJson(settings::cur, d.to<JsonObject>(), true);
+    toJson(settings::cur, d.to<JsonObject>(), true);
     d["model"] = FW_MODEL;
     d["fw"] = FW_VERSION;
     String s;
@@ -358,7 +582,7 @@ void routes() {
       if (index == 0) {
         otaOk = false;
         otaError = "";
-        // ?fs=1: a LittleFS image (the web UI) instead of the firmware.
+        // با ?fs=1 فایل ارسالی «تصویر LittleFS» (ظاهر منو) است، نه Firmware.
         bool fs = r->hasParam("fs");
         LOGI("ota", "%s upload: %s", fs ? "filesystem" : "firmware", name.c_str());
         if (fs && fsOk) { LittleFS.end(); fsOk = false; }
@@ -373,7 +597,7 @@ void routes() {
     });
 
   server.onNotFound([](AsyncWebServerRequest* r) {
-    // Captive portal: any page on any host opens the UI.
+    // Captive portal: هر نشانی ناشناخته به منو هدایت می‌شود تا گوشی خودش منو را باز کند.
     if (r->url().startsWith("/api/")) return sendError(r, 404, "not_found");
     r->redirect("http://" + apIp.toString() + "/");
   });
@@ -392,12 +616,12 @@ void begin() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAPConfig(apIp, apIp, IPAddress(255, 255, 255, 0));
   String ssid = settings::apSsid();
-  WiFi.softAP(ssid.c_str(), settings::cur.apPass, 6, 0, 4);
+  WiFi.softAP(ssid.c_str(), settings::cur.apPass, PORTAL_AP_CHANNEL, 0, PORTAL_AP_MAX_CLIENTS);
   dns.setErrorReplyCode(DNSReplyCode::NoError);
   dns.start(53, "*", apIp);
   routes();
   server.begin();
-  leds::run(leds::RUN_CONFIG);
+  leds::run(leds::RUN_STEADY);   // config mode: RUN fixed on
   LOGI("portal", "config mode: Wi-Fi \"%s\", open http://%s/", ssid.c_str(), apIp.toString().c_str());
 }
 
@@ -422,7 +646,7 @@ void loop() {
     walkIdx = 0;
     walkAt = 0;
   }
-  if (walkIdx >= 0 && now - walkAt >= 1000) {
+  if (walkIdx >= 0 && now - walkAt >= PORTAL_WALK_STEP_MS) {
     while (walkIdx < RELAY_COUNT && !relays::fitted(walkIdx)) walkIdx++;
     if (walkIdx >= RELAY_COUNT) {
       walkIdx = -1;
@@ -433,9 +657,9 @@ void loop() {
       walkAt = now;
     }
   }
-  if (now - lastPush >= PUSH_MS) {
+  if (now - lastPush >= PORTAL_PUSH_MS) {
     lastPush = now;
-    ws.cleanupClients(MAX_WS);
+    ws.cleanupClients(PORTAL_MAX_WS);
     pushState();
   }
   if (restartAt && (int32_t)(now - restartAt) >= 0) {

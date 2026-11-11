@@ -148,6 +148,27 @@
       }
     },
     {
+      "key": "relay_8",
+      "kind": "digital_output",
+      "display_name": {
+        "fa": "رله ۸",
+        "en": "Relay 8"
+      },
+      "data_type": "bool",
+      "access": "read_write",
+      "write_class": "command",
+      "states": {
+        "0": "OFF",
+        "1": "ON"
+      },
+      "ui": {
+        "order": 8,
+        "group": "outputs",
+        "icon": "power",
+        "chart": true
+      }
+    },
+    {
       "key": "uptime_s",
       "kind": "variable",
       "display_name": {
@@ -181,7 +202,8 @@
         "relay_5": {},
         "relay_6": {},
         "relay_7": {},
-        "uptime_s": {}
+        "uptime_s": {},
+        "relay_8": {}
       }
     },
     "modbus_rtu": {
@@ -227,6 +249,10 @@
         "uptime_s": {
           "register_type": "input",
           "address": 4
+        },
+        "relay_8": {
+          "register_type": "coil",
+          "address": 7
         }
       }
     }
@@ -267,6 +293,10 @@
         {
           "tag": "relay_7",
           "value": false
+        },
+        {
+          "tag": "relay_8",
+          "value": false
         }
       ]
     },
@@ -304,6 +334,10 @@
         },
         {
           "tag": "relay_7",
+          "value": true
+        },
+        {
+          "tag": "relay_8",
           "value": true
         }
       ]

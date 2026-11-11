@@ -1,6 +1,10 @@
 # Builds release\TiTiRelay8-<version>\: the full flash image, the OTA image, the LittleFS image of
 # data\ (the web UI) and flash.bat with esptool.exe, ready for a production PC.
-#   powershell -ExecutionPolicy Bypass -File tools\build_release.ps1
+#   powershell -ExecutionPolicy Bypass -File tools\build_release.ps1 [-Ca path\to\ca.crt]
+# The device CA (deploy/ca/ca.crt of the server, never ca.key) is copied into the web UI image as
+# /ca.pem, so every board trusts the server's TLS certificate without a per-board step. Without
+# -Ca it uses certs\ca.crt if that file exists.
+param([string]$Ca = '')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $arduino = Join-Path $env:LOCALAPPDATA 'Arduino15\packages\esp32'
@@ -12,7 +16,7 @@ $mklittlefs = Get-ChildItem (Join-Path $arduino 'tools\mklittlefs') -Directory |
 $fsOffset = '0x3D0000'
 $fsSize = 0x20000
 
-$version = (Select-String -Path (Join-Path $root 'board.h') -Pattern '#define FW_VERSION\s+"([^"]+)"').Matches[0].Groups[1].Value
+$version = (Select-String -Path (Join-Path $root 'config.h') -Pattern '#define FW_VERSION\s+"([^"]+)"').Matches[0].Groups[1].Value
 $out = Join-Path $root "release\TiTiRelay8-$version"
 $build = Join-Path $root 'build'
 New-Item -ItemType Directory -Force $out, $build | Out-Null
@@ -21,8 +25,23 @@ Write-Host "Compiling firmware $version ..."
 & $cli compile --fqbn 'esp32:esp32:esp32:PartitionScheme=min_spiffs' --output-dir $build $root
 if ($LASTEXITCODE -ne 0) { throw 'compile failed' }
 
-Write-Host 'Building the LittleFS image of data\ ...'
-& (Join-Path $mklittlefs.FullName 'mklittlefs.exe') -c (Join-Path $root 'data') -p 256 -b 4096 -s $fsSize (Join-Path $out "TiTiRelay8-$version-littlefs.bin")
+if (-not $Ca -and (Test-Path (Join-Path $root 'certs\ca.crt'))) { $Ca = Join-Path $root 'certs\ca.crt' }
+$fsDir = Join-Path $build 'fs'
+if (Test-Path $fsDir) { Remove-Item -Recurse -Force $fsDir }
+Copy-Item (Join-Path $root 'data') $fsDir -Recurse
+if ($Ca) {
+  $pem = Get-Content $Ca -Raw
+  if ($pem -match 'PRIVATE KEY') { throw "$Ca holds a private key. Give ca.crt only, never ca.key." }
+  if ($pem -notmatch 'BEGIN CERTIFICATE') { throw "$Ca is not a PEM certificate" }
+  if ($pem.Length -gt 3900) { throw "$Ca is too large (4000 bytes at most)" }
+  Set-Content -Path (Join-Path $fsDir 'ca.pem') -Value $pem -NoNewline -Encoding ascii
+  Write-Host "Device CA included: $Ca"
+} else {
+  Write-Host 'No device CA given: a TLS server needs it pasted in the portal (Connection page).'
+}
+
+Write-Host 'Building the LittleFS image ...'
+& (Join-Path $mklittlefs.FullName 'mklittlefs.exe') -c $fsDir -p 256 -b 4096 -s $fsSize (Join-Path $out "TiTiRelay8-$version-littlefs.bin")
 if ($LASTEXITCODE -ne 0) { throw 'mklittlefs failed (does data\ fit in 128 KB?)' }
 
 # One image for a blank chip: bootloader, partition table, OTA data, firmware and the web UI.
