@@ -315,7 +315,7 @@ void taskMain(void*) {
     health::feed();
     addr = settings::modbusAddress();              // دیپ‌سوئیچ هر لحظه قابل تغییر است
     if (addr == 0 && !warnedAddr) {
-      LOGE("modbus", "invalid slave address 0: set DIP AD1..AD7 (or a manual address)");
+      LOGE("modbus", "invalid slave address: set the Modbus address (1..247) in the config menu");
       warnedAddr = true;
     } else if (addr) {
       warnedAddr = false;

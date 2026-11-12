@@ -52,20 +52,23 @@ The serial log runs at 115200 baud.
 ## Web UI on LittleFS (separate from the firmware)
 
 The menu pages are **not** part of the firmware. They are the files of `data/`
-(`index.html`, `static/qr.js`, and `ca.pem` when a device CA is shipped) and live in the LittleFS
+(`index.html`, `static/qr.js`, the Persian font `static/fonts/vazirmatn-*.woff2`, and `ca.pem` when a
+device CA is shipped) and live in the LittleFS
 partition (`spiffs`, 128 KB at `0x3D0000`). You can change and upload them without touching the
 firmware, settings or identity. Three ways:
 
-1. **Arduino IDE 2**: install the
-   [arduino-littlefs-upload](https://github.com/earlephilhower/arduino-littlefs-upload) plugin, choose
-   the **Minimal SPIFFS** partition scheme, close the Serial Monitor, then `Ctrl+Shift+P` →
-   *Upload LittleFS to Pico/ESP8266/ESP32*.
-2. **Release folder**: `flash-web.bat COM5` writes `littlefs.bin` (made by `tools\build_release.ps1`
+1. **Release folder** (the normal way): `flash-web.bat COM5` writes `littlefs.bin` (made by `tools\build_release.ps1`
    from `data/`, plus `ca.pem` if `certs\ca.crt` exists).
-3. **The portal**, System page: tick "This is the web UI image (LittleFS)" and choose `littlefs.bin`.
+2. **The portal**, System page: tick "This is the web UI image (LittleFS)" and choose `littlefs.bin`.
 
-**Size:** the partition is 128 KB and the files are about 88 KB, so there is room for roughly
-20-30 KB more. `mklittlefs` ends with exit code 0 even when the partition is full (the image then silently
+**Fonts:** Persian text uses Vazirmatn (Google Fonts, SIL Open Font License, `docs/vazirmatn-OFL.txt`),
+only its Persian/Arabic characters, regular and bold (about 21 KB each); English text and digits use Arial
+from the phone or computer. Nothing is loaded from the internet (the board's own Wi-Fi has none).
+
+**Size:** the partition is 128 KB. `data/` with the fonts is about 133 KB, so the release script
+gzips `index.html` and the scripts (the board sends `*.gz` with `Content-Encoding: gzip`) and the image
+holds about 70 KB. Uploading `data/` as it is (for example with the arduino-littlefs-upload plugin of
+Arduino IDE 2) therefore no longer fits: use `flash-web.bat` or the portal. `mklittlefs` ends with exit code 0 even when the partition is full (the image then silently
 lacks files); `build_release.ps1` therefore checks that every file is in the image and stops with an
 error if not. Without the web UI the board shows a small page that can install a LittleFS image.
 

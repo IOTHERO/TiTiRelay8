@@ -392,10 +392,35 @@ void pushState() {
     if (id && ws.availableForWrite(id)) ws.text(id, s);
 }
 
+// عیب‌یابی اتصال: ورود و خروج گوشی یا کامپیوتر به وای‌فای خود برد، و IP که از برد گرفته،
+// در گزارش سریال نوشته می‌شود. اگر «client joined» بیاید ولی «client got IP» نه، مشکل DHCP است؛
+// اگر IP گرفته ولی «page requested» نیامد، درخواست به برد نرسیده (مسیر اشتباه در گوشی یا کامپیوتر).
+void onApEvent(arduino_event_id_t ev, arduino_event_info_t info) {
+  switch (ev) {
+    case ARDUINO_EVENT_WIFI_AP_STACONNECTED: {
+      const uint8_t* m = info.wifi_ap_staconnected.mac;
+      LOGI("portal", "client joined the Wi-Fi: %02X:%02X:%02X:%02X:%02X:%02X", m[0], m[1], m[2], m[3], m[4], m[5]);
+      break;
+    }
+    case ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED: {
+      String ip = IPAddress(info.wifi_ap_staipassigned.ip.addr).toString();
+      LOGI("portal", "client got IP %s", ip.c_str());
+      break;
+    }
+    case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
+      LOGI("portal", "client left the Wi-Fi");
+      break;
+    default:
+      break;
+  }
+}
+
 void routes() {
   // ظاهر منو در LittleFS است (data/index.html)؛ در غیر این صورت صفحهٔ ساده‌ای که امکان نصب تصویر
   // LittleFS را می‌دهد.
   server.on("/", HTTP_GET, [](AsyncWebServerRequest* r) {
+    String from = r->client()->remoteIP().toString();
+    LOGI("portal", "page requested by %s", from.c_str());
     if (fsOk && (LittleFS.exists("/index.html") || LittleFS.exists("/index.html.gz"))) {
       AsyncWebServerResponse* res = r->beginResponse(LittleFS, "/index.html", "text/html");
       res->addHeader("Cache-Control", "no-store");
@@ -619,8 +644,11 @@ void begin() {
   WiFi.softAP(ssid.c_str(), settings::cur.apPass, PORTAL_AP_CHANNEL, 0, PORTAL_AP_MAX_CLIENTS);
   dns.setErrorReplyCode(DNSReplyCode::NoError);
   dns.start(53, "*", apIp);
+  WiFi.onEvent(onApEvent);
   routes();
   server.begin();
+  LOGI("portal", "web server on %s:80 (clients get %u.%u.%u.%u..)", WiFi.softAPIP().toString().c_str(),
+       PORTAL_IP[0], PORTAL_IP[1], PORTAL_IP[2], PORTAL_IP[3] + 1);
   leds::run(leds::RUN_STEADY);   // config mode: RUN fixed on
   LOGI("portal", "config mode: Wi-Fi \"%s\", open http://%s/", ssid.c_str(), apIp.toString().c_str());
 }

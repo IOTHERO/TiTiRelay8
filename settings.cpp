@@ -129,7 +129,7 @@ void defaults(Settings& s) {
   s.telemetryS = DEFAULT_TELEMETRY_S;
   s.localEnabled = true;
   s.otaEnabled = true;
-  s.mbAddrFromDip = 1;
+  s.mbAddrFromDip = 0;   // دیگر استفاده نمی‌شود: آدرس فقط از منو
   s.mbAddr = DEFAULT_MB_ADDR;
   s.mbBaud = DEFAULT_MB_BAUD;
   s.mbParity = DEFAULT_MB_PARITY;
@@ -380,11 +380,11 @@ bool setCaPem(const String& pem) {
 // -------------------------------------------------------------------------------------
 //  توابع کمکی
 // -------------------------------------------------------------------------------------
-// آدرس مؤثر Slave: از دیپ‌سوئیچ (AD1..AD7) یا مقدار دستی. 0 = نامعتبر (برد جواب نمی‌دهد).
+// آدرس Slave در Modbus RTU فقط از منو (۱ تا ۲۴۷). دیپ‌سوئیچ‌های AD1..AD7 آزادند و فقط به‌عنوان
+// ورودی خوانده و گزارش می‌شوند. این آدرس فقط برای RS-485 است: در Wi-Fi/MQTT هر برد با شناسهٔ
+// یکتای خودش (device_id) شناخته می‌شود و دو برد با آدرس یکسان با هم تداخلی ندارند.
 uint8_t modbusAddress() {
-  if (!cur.mbAddrFromDip) return cur.mbAddr;
-  uint8_t a = inputs::address();
-  return a <= 247 ? a : 0;
+  return cur.mbAddr >= 1 && cur.mbAddr <= 247 ? cur.mbAddr : 0;
 }
 
 int8_t platformServer() {

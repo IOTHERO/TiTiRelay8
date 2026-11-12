@@ -389,6 +389,10 @@ void startClient() {
     if (!caLoaded) { caCache = settings::caPem(); caLoaded = true; }
     if (caCache.length()) cfg.broker.verification.certificate = caCache.c_str();
     else cfg.broker.verification.crt_bundle_attach = esp_crt_bundle_attach;
+    // عیب‌یابی: گواهی CA سرور از کجا آمد؟ اگر «built-in» بنویسد، CA اختصاصی روی برد نیست و سرور با
+    // مرجع خصوصی رد می‌شود (باید در منو وارد شود یا فایل /ca.pem در LittleFS باشد).
+    LOGI("mqtt", "TLS trust: %s", caCache.length() ? "the device CA (custom, saved on the board)"
+                                                    : "built-in public CAs only (NO custom CA found)");
   }
   cfg.credentials.client_id = clientId;
   if (v.user[0]) cfg.credentials.username = v.user;

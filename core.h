@@ -118,7 +118,7 @@ struct Cmd {
 // نتیجهٔ فرمانی که شناسه داشت (از حلقهٔ اصلی صدا زده می‌شود)
 using ResultFn = void (*)(const char* id, bool ok, uint8_t relay, bool value, const char* err);
 
-void begin(bool safeMode);
+void begin(bool safeMode, bool configMode = false);   // configMode: همه خاموش و وضعیت ذخیره نمی‌شود
 void loop();
 bool post(const Cmd& c);                      // از هر Task؛ false اگر صف پر است
 bool set(uint8_t relay, bool on, Source src, uint32_t pulseMs = 0);

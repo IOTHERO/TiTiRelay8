@@ -11,7 +11,7 @@
 //    کلید کانفیگ (دیپ ۸) روشن   ← منوی تنظیمات؛ وای‌فای «TiTi-R8-xxxx»، نشانی 192.168.1.100
 //    کلید کانفیگ خاموش          ← ارتباطی که در منو انتخاب شده:
 //        Wi-Fi  : MQTT به پلتفرم (قرارداد native) یا یک بروکر عمومی
-//        RS-485 : Modbus RTU Slave؛ آدرس از دیپ AD1..AD7 (یا دستی در منو)
+//        RS-485 : Modbus RTU Slave؛ آدرس از منو (دیپ AD1..AD7 ورودی آزاد است)
 //    اگر هنوز هیچ ارتباطی انتخاب نشده، حتی با کلید خاموش منوی تنظیمات باز می‌شود.
 //
 //  راه‌اندازی در Arduino IDE: برد «ESP32 Dev Module»، Partition Scheme «Minimal SPIFFS
@@ -338,7 +338,12 @@ void loop() {
   digitalWrite(PIN_LED_DATA, linked != activity);   // وصل: ثابت روشن و جرقه آن را کوتاه خاموش می‌کند؛ قطع: برعکس
 }
 
-void run(Pattern p) { pattern = p; }
+void run(Pattern p) {
+  if (p == pattern) return;
+  pattern = p;
+  LOGI("led", "RUN: %s", p == RUN_STEADY ? "steady (config mode)" : p == RUN_OK ? "slow blink (healthy)"
+                                                                               : "fast blink (fault)");
+}
 void link(bool up) { linked = up; }
 void data() { activityUntil = millis() + LED_ACTIVITY_MS; }
 void identify(uint32_t ms) { identifyUntil = millis() + ms; }
@@ -352,6 +357,7 @@ void identify(uint32_t ms) { identifyUntil = millis() + ms; }
 //    api <https://hub...>    wifi <ssid> [password]       mode wifi|rs485
 //    qr <متن QR برچسب>        serial <شمارهٔ سریال>         (برچسب محصول)
 //    show                    save                         restart
+//    led                     آزمایش چراغ‌ها (RUN و DATA شش ثانیه یکی‌درمیان)
 //    factory yes | wipe yes  همه‌چیز پاک می‌شود، هویت و برچسب هم، تا برد دوباره برنامه‌ریزی شود
 //                            (hub-provision بردی را که شناسه دارد نمی‌پذیرد). ریست کارخانهٔ مشتری
 //                            (منو یا کلید کانفیگ) هویت و برچسب را نگه می‌دارد.
@@ -408,9 +414,12 @@ void run(char* cmd) {
   char* arg = strchr(cmd, ' ');
   if (arg) { *arg++ = 0; while (*arg == ' ') arg++; }
   if (!strcmp(cmd, "help") || !*cmd) {
-    reply("id, secret, server <host> [port] [tls], api <url>, wifi <ssid> [pass], mode wifi|rs485, qr <text>, serial <sn>, show, save, restart, factory yes, wipe yes");
+    reply("id, secret, server <host> [port] [tls], api <url>, wifi <ssid> [pass], mode wifi|rs485, qr <text>, serial <sn>, show, led, save, restart, factory yes, wipe yes");
   } else if (!strcmp(cmd, "show")) {
     show();
+  } else if (!strcmp(cmd, "led")) {
+    leds::identify(6000);   // RUN و DATA شش ثانیه یکی‌درمیان: اگر چشمک نزنند، ایراد از سخت‌افزار یا مسیر LED است
+    reply("RUN and DATA alternate for 6 s (if they do not blink, check the LED wiring: RUN GPIO27, DATA GPIO14)");
   } else if (!strcmp(cmd, "id") && arg && *arg) {
     strlcpy(d().deviceId, arg, sizeof d().deviceId);
     strlcpy(platformServer().user, arg, sizeof platformServer().user);   // نام کاربری MQTT همان شناسهٔ دستگاه است
@@ -542,14 +551,21 @@ void linkLossCheck(uint32_t now) {
 
 // «خطا» یعنی خود برد مشکل دارد: حالت ایمن، حافظهٔ کم، آدرس مدباس نامعتبر یا سرور تعریف‌نشده.
 // قطع بودن سرور خطای برد نیست (ممکن است اینترنت ساختمان قطع باشد)؛ آن را چراغ DATA نشان می‌دهد.
-bool fault() {
-  if (health::safeMode() || health::lowHeap()) return true;
-  if (runMode == RUN_RS485) return modbus::address() == 0;
-  return !cloud::configured();
+const char* faultReason() {
+  if (health::safeMode()) return "safe mode";
+  if (health::lowHeap()) return "low memory";
+  if (runMode == RUN_RS485) return modbus::address() == 0 ? "Modbus address 0" : nullptr;
+  return cloud::configured() ? nullptr : "no server configured";
 }
 
 void runLed(uint32_t now) {
-  leds::run(fault() ? leds::RUN_FAULT : leds::RUN_OK);
+  static const char* lastReason = nullptr;
+  const char* why = faultReason();
+  if (why != lastReason) {
+    lastReason = why;
+    if (why) LOGW("led", "fault: %s", why);
+  }
+  leds::run(why ? leds::RUN_FAULT : leds::RUN_OK);
   if (runMode == RUN_RS485) {
     uint32_t last = modbus::lastFrameMs();
     leds::link(last && now - last < MODBUS_LINK_FRESH_MS);
@@ -603,7 +619,8 @@ void setup() {
   logx::setLevel(settings::cur.logLevel);
   banner();
   relays::onResult(cloud::ackResult);            // نتیجهٔ هر فرمان رله به سرور گزارش شود
-  relays::begin(health::safeMode());             // حالت ایمن: همه خاموش
+  // حالت ایمن یا حالت تنظیمات: همه خاموش (در منو، وضعیت ذخیره‌شده هم دست نمی‌خورد)
+  relays::begin(health::safeMode(), inputs::configAtBoot() || settings::cur.mode == MODE_UNSET);
   local::begin();
   rules::begin();
   health::watchThisTask();

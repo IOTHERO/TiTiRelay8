@@ -62,7 +62,8 @@ static constexpr uint8_t PIN_RS485_TX = 17;
 
 // --- دیپ‌سوئیچ (U6) ---------------------------------------------------------------------
 // پایهٔ COMMON به +3.3V وصل است و هر خط یک مقاومت 4.7k پایین‌کش دارد: کلید روشن = HIGH.
-// AD1..AD7 بیت‌های آدرس Modbus هستند (AD1 کم‌ارزش‌ترین بیت)، AD8 = کلید حالت تنظیمات.
+// AD1..AD7 ورودی‌های آزادند (خوانده و در منو و Modbus گزارش می‌شوند)؛ AD8 = کلید حالت تنظیمات.
+// آدرس Modbus از منو تنظیم می‌شود، نه از دیپ‌سوئیچ.
 // توجه: GPIO34 و 35 و 36 و 39 فقط ورودی‌اند و pull-up داخلی ندارند (مقاومت بیرونی لازم است).
 static constexpr uint8_t ADDR_BITS = 7;
 static constexpr uint8_t PIN_ADDR[ADDR_BITS] = {36, 39, 34, 35, 32, 33, 25};
@@ -283,7 +284,7 @@ struct Settings {
   bool otaEnabled;        // پذیرش آپدیت Firmware از پلتفرم
 
   // --- RS-485 / Modbus RTU Slave ---
-  uint8_t mbAddrFromDip;  // 1 = آدرس از دیپ AD1..AD7، 0 = مقدار دستی mbAddr
+  uint8_t mbAddrFromDip;  // قدیمی، استفاده نمی‌شود (جای آن در Blob تنظیمات می‌ماند)
   uint8_t mbAddr;
   uint32_t mbBaud;
   uint8_t mbParity;       // 0 بدون، 1 زوج، 2 فرد

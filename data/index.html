@@ -4,35 +4,43 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0d12">
-<title>TiTi Relay-8</title>
+<title>TiTiSwitch · TiTi Relay-8</title>
 <style>
-:root{--bg:#0a0c11;--bg2:#10131b;--card:rgba(255,255,255,.035);--card2:rgba(255,255,255,.06);--line:rgba(255,255,255,.08);
+:root{color-scheme:dark;--bg:#0a0c11;--bg2:#10131b;--card:rgba(255,255,255,.035);--card2:rgba(255,255,255,.06);--line:rgba(255,255,255,.08);
 --tx:#eef0f6;--mut:#8b93a7;--gold:#d9b46a;--gold2:#f6dfa6;--ok:#36d399;--bad:#ff5d6c;--warn:#ffb547;--info:#6aa8ff;
 --r:18px;--sh:0 10px 40px rgba(0,0,0,.45)}
+/* Persian: Vazirmatn (Google Fonts, OFL; Persian/Arabic characters only, in static/fonts). English and digits: Arial. */
+@font-face{font-family:"Vazirmatn";src:url(/static/fonts/vazirmatn-400.woff2) format("woff2");font-weight:400;font-display:swap;unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0898-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC}
+@font-face{font-family:"Vazirmatn";src:url(/static/fonts/vazirmatn-700.woff2) format("woff2");font-weight:600 800;font-display:swap;unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0898-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{font-family:Vazirmatn,"Segoe UI",Tahoma,system-ui,sans-serif;color:var(--tx);background:var(--bg);
+body{font-family:"Vazirmatn",Arial,"Helvetica Neue",Helvetica,sans-serif;color:var(--tx);background:var(--bg);
 background-image:radial-gradient(1200px 600px at 85% -10%,rgba(217,180,106,.13),transparent 60%),
 radial-gradient(900px 500px at -10% 110%,rgba(106,168,255,.08),transparent 60%);background-attachment:fixed;
 font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
-[dir=ltr] body{font-family:"Segoe UI",system-ui,sans-serif}
+[dir=ltr] body{font-family:Arial,"Helvetica Neue",Helvetica,"Vazirmatn",sans-serif}
 button,input,select,textarea{font:inherit;color:inherit}
+select.in{cursor:pointer}
+select option,select optgroup{background:#161a24;color:#eef0f6}
+select option:checked{background:#2a2518;color:#f6dfa6}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:8px}::-webkit-scrollbar-track{background:transparent}
+#tip{position:fixed;z-index:90;max-width:260px;padding:8px 12px;border-radius:10px;background:#1b1f2b;border:1px solid rgba(217,180,106,.35);color:#eef0f6;font-size:12px;line-height:1.7;box-shadow:0 10px 30px rgba(0,0,0,.5);pointer-events:none;opacity:0;transition:opacity .12s}#tip.on{opacity:1}
 .hide{display:none!important}
 .gold{background:linear-gradient(135deg,var(--gold),var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent}
 /* login */
 #login{min-height:100%;display:grid;place-items:center;padding:24px}
 .lbox{width:100%;max-width:380px;padding:34px 28px;border-radius:26px;background:linear-gradient(160deg,rgba(255,255,255,.07),rgba(255,255,255,.02));
 border:1px solid var(--line);box-shadow:var(--sh);backdrop-filter:blur(18px);animation:rise .6s ease both;text-align:center}
-.logo{width:74px;height:74px;margin:0 auto 14px;border-radius:22px;display:grid;place-items:center;
-background:conic-gradient(from 210deg,var(--gold),#7a5a22,var(--gold2),var(--gold));box-shadow:0 0 40px rgba(217,180,106,.35);animation:glow 3s ease-in-out infinite}
-.logo svg{width:40px;height:40px}
+.logo{width:92px;height:92px;margin:0 auto 6px;display:grid;place-items:center;background:none}
+.logo svg{width:92px;height:92px;filter:drop-shadow(0 0 18px rgba(0,180,205,.35))}
+.tsw{text-align:center;font-weight:700;letter-spacing:.5px;color:#00B4CD;margin:0 0 6px;direction:ltr}
 .lbox h1{font-size:22px;margin-bottom:4px}
 .lbox p{color:var(--mut);margin-bottom:22px;font-size:13px}
 /* layout */
 #app{display:grid;grid-template-columns:240px 1fr;min-height:100%}
 aside{position:sticky;top:0;height:100vh;padding:22px 16px;border-inline-end:1px solid var(--line);background:rgba(10,12,17,.6);backdrop-filter:blur(16px);display:flex;flex-direction:column;gap:6px}
 .brand{display:flex;align-items:center;gap:12px;padding:6px 8px 20px}
-.brand .logo{width:42px;height:42px;margin:0;border-radius:13px}.brand .logo svg{width:22px;height:22px}
+.brand .logo{width:44px;height:44px;margin:0}.brand .logo svg{width:44px;height:44px;filter:none}
 .brand b{display:block;font-size:15px}.brand small{color:var(--mut);font-size:11px}
 .nav{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:14px;cursor:pointer;color:var(--mut);border:1px solid transparent;transition:.25s;background:none;text-align:start;width:100%}
 .nav svg{width:20px;height:20px;flex:none}
@@ -50,8 +58,8 @@ header h2{font-size:22px;font-weight:700;margin-inline-end:auto}
 .dot.warn{background:var(--warn);box-shadow:0 0 10px var(--warn);animation:pulse 1s infinite}
 .page{display:none;animation:rise .45s ease both}.page.on{display:block}
 .grid{display:grid;gap:16px}
-.g2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
-.g4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.g2{grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr))}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px;position:relative;overflow:hidden;transition:border-color .3s,transform .3s}
 .card h3{font-size:15px;margin-bottom:14px;display:flex;align-items:center;gap:10px}
 .card h3 small{color:var(--mut);font-weight:400;font-size:12px;margin-inline-start:auto}
@@ -112,7 +120,7 @@ textarea.in{min-height:110px;font-family:Consolas,monospace;font-size:12px;direc
 .srv>.hd b{flex:1}.srv>.bd{padding:4px 14px 14px;display:none}.srv.open>.bd{display:block}
 .num{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:var(--card2);font-size:12px;font-weight:700}
 /* relays */
-.relays{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.relays{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr));gap:14px}
 .rl{padding:18px;border-radius:20px;background:var(--card);border:1px solid var(--line);transition:.35s;position:relative;overflow:hidden}
 .rl:before{content:"";position:absolute;inset:0;background:radial-gradient(240px 140px at 50% -20%,rgba(54,211,153,.25),transparent 70%);opacity:0;transition:.4s}
 .rl.on{border-color:rgba(54,211,153,.45);box-shadow:0 0 30px rgba(54,211,153,.12)}
@@ -183,6 +191,17 @@ main{padding-bottom:130px}
 .savebar{bottom:96px}
 .modes{grid-template-columns:1fr}
 }
+/* phones: two relay tiles per row, tighter padding, nothing wider than the screen */
+@media(max-width:560px){
+main{padding-left:12px;padding-right:12px}
+.relays{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.rl{padding:12px}.rl .pulse{flex-wrap:wrap}.rl .pulse .in{width:100%!important}.rl .pulse .btn{flex:1 1 100%}
+.card{padding:16px}
+.dock{left:8px;right:8px}
+.dock .nav span{max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
+main,.card,.grid>*{min-width:0}
+.alert,.kv b,.chip{overflow-wrap:anywhere}
 @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 @keyframes slide{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
@@ -193,7 +212,7 @@ main{padding-bottom:130px}
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute">
-<symbol id="i-logo" viewBox="0 0 24 24"><path fill="#1a1307" d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+<symbol id="i-logo" viewBox="0 0 512 512"><g transform="translate(-57 1) scale(0.33)"><path d="M1199 327.5H499.5V554.5H726.5V1006H953.5V554.5H1180.5V1006H1444.5V1233H702" fill="none" stroke="#00B4CD" stroke-width="37"/><rect x="783" y="529" width="112" height="279" rx="56" fill="#F58634"/><circle cx="839" cy="600" r="28" fill="#fff"/><rect x="1011" y="739" width="112" height="279" rx="56" fill="#F58634"/><circle cx="1067" cy="946" r="28" fill="#fff"/><circle cx="1264" cy="320" r="33" fill="#00B4CD"/><circle cx="647" cy="1233" r="32" fill="#00B4CD"/><path d="M1192.8 268.3A88 88 0 0 1 1298.4 239.0 M1145.4 240.0A143 143 0 0 1 1324.4 190.4 M1331.8 372.9A86 86 0 0 1 1230.4 399.2 M1381.7 399.4A142 142 0 0 1 1201.8 447.6" fill="none" stroke="#00B4CD" stroke-width="20" stroke-linecap="round"/><path d="M590.4 1289.6A80 80 0 0 1 590.4 1176.4 M550.1 1329.9A137 137 0 0 1 550.1 1136.1 M509.1 1370.9A195 195 0 0 1 509.1 1095.1" fill="none" stroke="#00B4CD" stroke-width="32" stroke-linecap="round"/></g></symbol>
 <symbol id="i-dash" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M4 13h6V4H4zm10 7h6v-9h-6zM4 20h6v-3H4zm10-13h6V4h-6z"/></symbol>
 <symbol id="i-link" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M5 12.5a10 10 0 0 1 14 0M8 15.5a6 6 0 0 1 8 0M12 19h.01M2 9a14.5 14.5 0 0 1 20 0"/></symbol>
 <symbol id="i-rl" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 3v8M6.4 6.4a8 8 0 1 0 11.2 0"/></symbol>
@@ -207,6 +226,7 @@ main{padding-bottom:130px}
 <section id="login">
   <div class="lbox">
     <div class="logo"><svg><use href="#i-logo"/></svg></div>
+    <p class="tsw">TiTiSwitch</p>
     <h1><span class="gold" id="lname">TiTi Relay-8</span></h1>
     <p data-t="loginSub"></p>
     <label class="f"><span data-t="adminPass"></span>
@@ -317,7 +337,7 @@ main{padding-bottom:130px}
           <details><summary style="cursor:pointer;color:var(--mut)" data-t="caTitle"></summary>
             <p class="sub" style="margin:8px 0" data-t="caSub"></p>
             <textarea class="in" id="ca" placeholder="-----BEGIN CERTIFICATE-----"></textarea>
-            <div class="bar" style="margin-top:10px"><button class="btn sm" id="caSave" data-t="saveCa"></button><span class="chip" id="caState"></span></div>
+            <div class="bar" style="margin-top:10px"><button class="btn sm" id="caSave" data-t="saveCa"></button><button class="btn sm" id="caClear" data-t="clearCa"></button><span class="chip" id="caState"></span></div>
           </details>
         </div>
       </div>
@@ -325,9 +345,8 @@ main{padding-bottom:130px}
       <div id="rsPane" class="grid g2 hide">
         <div class="card">
           <h3 data-t="mbTitle"></h3>
-          <label class="tg"><span data-t="addrFromDip"></span><input type="checkbox" data-k="mb.fromDip" data-int><i></i></label>
-          <div class="alert info" id="dipAddr"></div>
-          <label class="f" id="manAddr"><span data-t="manualAddr"></span><input class="in ltr" type="number" min="1" max="247" data-k="mb.addr"></label>
+          <label class="f" id="manAddr"><span data-t="manualAddr"></span><input class="in ltr" type="number" min="1" max="247" data-k="mb.addr" data-num></label>
+          <div class="alert info" data-t="addrNote"></div>
           <div class="row">
             <label class="f"><span data-t="baud"></span><select class="in" data-k="mb.baud" data-num>
               <option>1200</option><option>2400</option><option>4800</option><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></label>
@@ -476,11 +495,11 @@ wifiNet:"شبکهٔ وای‌فای",scan:"جستجو",scanning:"در حال ج�
 testWifi:"تست اتصال وای‌فای",servers:"سرورها",serversSub:"به ترتیب امتحان می‌شوند؛ اگر یکی در دسترس نباشد سراغ بعدی می‌رود.",label:"برچسب محصول",labelSub:"همان QR که روی محصول چسبانده شده؛ مشتری با اسکن آن دستگاه را به حساب خود اضافه می‌کند. کد فعال‌سازی فقط یک بار و فقط برای اولین ثبت معتبر است.",serialNo:"شمارهٔ سریال",identifier:"شناسهٔ محصول",claimCode:"کد فعال‌سازی",showCode:"نمایش کد",hideCode:"پنهان کردن کد",printLabel:"چاپ برچسب",labelEdit:"ثبت یا تغییر برچسب (از فایل CSV سامانهٔ تولید)",labelNone:"برچسبی روی این دستگاه ثبت نشده است. در خط تولید با کنسول سریال (qr و serial) یا از همین‌جا ثبت کنید.",firstUse:"فقط برای اولین فعال‌سازی",
 apiUrl:"نشانی HTTP هاب (برای کلید محلی، قواعد و آپدیت)",localEnabled:"کنترل محلی از وای‌فای خانه (وقتی اینترنت قطع است)",otaEnabled:"پذیرش آپدیت Firmware از پلتفرم",localCtl:"کنترل محلی",offRules:"قواعد آفلاین",keyOk:"کلید دریافت شده",keyNone:"بدون کلید",deviceId:"شناسهٔ دستگاه (Device ID)",telemetryS:"دورهٔ ارسال وضعیت (ثانیه)",
 srvEnabled:"فعال",srvName:"نام",proto:"پروتکل",pPlatform:"پلتفرم TiTiSwitch",pGeneric:"MQTT عمومی",host:"آدرس سرور",port:"پورت",tls:"اتصال امن (TLS)",user:"نام کاربری",clientId:"Client ID (خالی = خودکار)",prefix:"پیشوند تاپیک",base:"تاپیک پایه",keepalive:"Keepalive (ثانیه)",qos:"QoS",test:"تست",up:"بالا",
-caTitle:"گواهی CA اختصاصی (اختیاری)",caSub:"برای سرور با گواهی داخلی. خالی = گواهی‌های عمومی داخلی دستگاه.",saveCa:"ذخیرهٔ گواهی",caSet:"گواهی ثبت شده",caNone:"گواهی داخلی",
-mbTitle:"تنظیمات Modbus RTU",addrFromDip:"آدرس از دیپ‌سوئیچ (AD1..AD7)",manualAddr:"آدرس دستی (۱ تا ۲۴۷)",baud:"سرعت (Baud)",parity:"Parity",pNone:"None",pEven:"Even",pOdd:"Odd",stopBits:"Stop bits",respDelay:"تأخیر پاسخ (ms)",swap:"جابه‌جایی RX / TX",swapSub:"اگر برد پاسخ نمی‌دهد و سیم‌کشی درست است، این را فعال کنید (TX=GPIO16، RX=GPIO17).",
+caTitle:"گواهی CA اختصاصی (اختیاری)",caSub:"برای سرور با گواهی داخلی. خالی = گواهی‌های عمومی داخلی دستگاه.",saveCa:"ذخیرهٔ گواهی",clearCa:"پاک کردن گواهی",caCleared:"گواهی دستی پاک شد",clearPass:"پاک کردن رمز",passCleared:"رمز پاک می‌شود — «ذخیره» را بزنید",caSet:"گواهی ثبت شده",caNone:"گواهی داخلی",
+mbTitle:"تنظیمات Modbus RTU",addrFromDip:"آدرس از دیپ‌سوئیچ (AD1..AD7)",manualAddr:"آدرس دستگاه در Modbus (۱ تا ۲۴۷)",addrNote:"این آدرس فقط برای RS-485 / Modbus است. در Wi-Fi / MQTT هر برد با شناسهٔ یکتای خودش شناخته می‌شود و آدرس یکسان تداخلی ندارد. دیپ‌سوئیچ‌های AD1..AD7 آزادند.",baud:"سرعت (Baud)",parity:"Parity",pNone:"None",pEven:"Even",pOdd:"Odd",stopBits:"Stop bits",respDelay:"تأخیر پاسخ (ms)",swap:"جابه‌جایی RX / TX",swapSub:"اگر برد پاسخ نمی‌دهد و سیم‌کشی درست است، این را فعال کنید (TX=GPIO16، RX=GPIO17).",
 regMap:"نقشهٔ رجیسترها",plcCol:"آدرس PLC",accessCol:"دسترسی",accRW:"خواندن/نوشتن",accR:"فقط خواندن",accW:"فقط نوشتن",plcSub:"«آدرس روی سیم» = آدرس شروع جدول + شمارهٔ رجیستر (صفرمبنا، مثل Modbus Poll). «آدرس PLC» همان شماره به شکل یک‌مبنا (۰۰۰۰۱، ۱۰۰۰۱، ۳۰۰۰۱، ۴۰۰۰۱) است که در بسیاری از نرم‌افزارهای PLC و HMI وارد می‌شود. اگر PLC شما یک خانه جابه‌جا می‌خواند، آدرس شروع را ۱ بگذارید.",mbBaseTitle:"آدرس شروع جدول‌ها (سازگاری با PLC)",mbBaseSub:"بعضی PLC یا HMI آدرس را از ۱ می‌شمارند یا فقط در بازهٔ مشخصی می‌خوانند. آدرس شروع هر جدول را اینجا بدهید؛ نقشهٔ برد روی همان بازه می‌نشیند. اگر هاب شما (نه PLC) با برد کار می‌کند، همه را ۰ نگه دارید.",preset:"الگوی آماده",presetStd:"استاندارد: شروع از ۰",presetOne:"شروع از ۱ (برخی PLC و HMI)",presetCustom:"سفارشی",baseCoil:"شروع Coil (رله‌ها)",baseDiscrete:"شروع Discrete (ورودی‌ها)",baseInput:"شروع Input (وضعیت)",baseHolding:"شروع Holding",lenient:"تحمل خواندن بلوکی خارج از نقشه",lenientSub:"اگر PLC یک‌جا بلوکی را می‌خواند که فقط بخشی از آن در نقشهٔ برد است، بخش خارج را صفر جواب بده (به جای خطای 02). اگر کل درخواست خارج از نقشه باشد، باز هم خطا برمی‌گردد.",
 wordSwap:"ترتیب کلمه: اول کلمهٔ پایین (Low word first)",wordSwapSub:"برای عددهای ۳۲ بیتی (زمان کارکرد، دفعات کار رله). پیش‌فرض: اول کلمهٔ بالا.",table:"جدول",addrCol:"آدرس روی سیم",meaning:"کاربرد",lossTitle:"قطع ارتباط",lossSub:"اگر در این مدت پیامی از سرور یا Master نرسد، این اقدام یک بار انجام می‌شود. صفر = غیرفعال.",lossTimeout:"مهلت (ثانیه)",lossAction:"اقدام",lHold:"حفظ وضعیت فعلی",lOff:"خاموش کردن همهٔ رله‌ها",lPreset:"وضعیت از پیش تعیین شده",
-walk:"تست ترتیبی",identify:"شناسایی (چشمک LED)",onCount:"روشن",inputs:"ورودی‌ها",inputsSub:"زنده",dipAddress:"آدرس دیپ‌سوئیچ",relaySet:"تنظیمات رله‌ها",minInterval:"فاصلهٔ حداقل هر رله (ms)",stagger:"فاصلهٔ روشن شدن کویل‌ها (ms)",name:"نام",powerOn:"پس از وصل برق",interlock:"اینترلاک با",pRestore:"آخرین وضعیت",pOff:"خاموش",pOn:"روشن",none:"—",
+walk:"تست ترتیبی",identify:"شناسایی (چشمک LED)",onCount:"روشن",inputs:"ورودی‌ها",inputsSub:"زنده",dipAddress:"مقدار ورودی‌های AD1..AD7",relaySet:"تنظیمات رله‌ها",minInterval:"فاصلهٔ حداقل هر رله (ms)",stagger:"فاصلهٔ روشن شدن کویل‌ها (ms)",name:"نام",powerOn:"پس از وصل برق",interlock:"اینترلاک با",pRestore:"آخرین وضعیت",pOff:"خاموش",pOn:"روشن",none:"—",
 pulse:"پالس",sec:"ثانیه",notFitted:"رزرو (GPIO12)",cycles:"دفعات",
 general:"عمومی",devName:"نام دستگاه",newAdmin:"رمز جدید مدیر (خالی = بدون تغییر)",apPass:"رمز وای‌فای پیکربندی (خالی = بدون تغییر)",logLevel:"سطح گزارش سریال",lvE:"فقط خطا",lvW:"هشدار",lvI:"اطلاعات",lvD:"اشکال‌زدایی",
 firmware:"به‌روزرسانی Firmware",otaSub:"فایل .bin خروجی Arduino را انتخاب کنید. پس از نصب، دستگاه خودش ریست می‌شود.",upload:"نصب",otaFs:"فایل رابط کاربری (LittleFS) است، نه Firmware",backup:"پشتیبان تنظیمات",download:"دریافت فایل",restore:"بازگردانی",factory:"بازگشت به تنظیمات کارخانه",liveLog:"گزارش زنده",pause:"توقف",resume:"ادامه",clear:"پاک کردن",
@@ -498,11 +517,11 @@ wifiNet:"Wi-Fi network",scan:"Scan",scanning:"Scanning…",noNets:"No networks f
 testWifi:"Test Wi-Fi",servers:"Servers",serversSub:"Tried in order; the next one is used when one cannot be reached.",label:"Product label",labelSub:"The same QR as on the product: the customer scans it to add the device to their account. The claim code works once, for the first registration only.",serialNo:"Serial number",identifier:"Product identifier",claimCode:"Claim code",showCode:"Show code",hideCode:"Hide code",printLabel:"Print label",labelEdit:"Enter or change the label (from the production CSV)",labelNone:"No label is stored on this device. Store it on the production line with the serial console (qr and serial) or here.",firstUse:"first activation only",
 apiUrl:"Hub HTTP address (local key, rules, updates)",localEnabled:"Local control over the home Wi-Fi (internet down)",otaEnabled:"Accept firmware updates from the platform",localCtl:"Local control",offRules:"Offline rules",keyOk:"Key received",keyNone:"No key",deviceId:"Device ID",telemetryS:"Status period (s)",
 srvEnabled:"Enabled",srvName:"Name",proto:"Protocol",pPlatform:"TiTiSwitch platform",pGeneric:"Generic MQTT",host:"Server address",port:"Port",tls:"Secure (TLS)",user:"Username",clientId:"Client ID (empty = automatic)",prefix:"Topic prefix",base:"Base topic",keepalive:"Keepalive (s)",qos:"QoS",test:"Test",up:"Up",
-caTitle:"Custom CA certificate (optional)",caSub:"For a server with a private certificate. Empty = the built-in public CAs.",saveCa:"Save certificate",caSet:"Certificate set",caNone:"Built-in CAs",
-mbTitle:"Modbus RTU settings",addrFromDip:"Address from DIP switch (AD1..AD7)",manualAddr:"Manual address (1..247)",baud:"Baud rate",parity:"Parity",pNone:"None",pEven:"Even",pOdd:"Odd",stopBits:"Stop bits",respDelay:"Response delay (ms)",swap:"Swap RX / TX",swapSub:"If the board does not answer and the wiring is right, turn this on (TX=GPIO16, RX=GPIO17).",
+caTitle:"Custom CA certificate (optional)",caSub:"For a server with a private certificate. Empty = the built-in public CAs.",saveCa:"Save certificate",clearCa:"Clear certificate",caCleared:"Custom certificate cleared",clearPass:"Clear password",passCleared:"Password will be cleared: press Save",caSet:"Certificate set",caNone:"Built-in CAs",
+mbTitle:"Modbus RTU settings",addrFromDip:"Address from DIP switch (AD1..AD7)",manualAddr:"Modbus device address (1..247)",addrNote:"Used only for RS-485 / Modbus. Over Wi-Fi / MQTT each board is known by its own unique ID, so equal addresses never clash. DIP switches AD1..AD7 are free inputs.",baud:"Baud rate",parity:"Parity",pNone:"None",pEven:"Even",pOdd:"Odd",stopBits:"Stop bits",respDelay:"Response delay (ms)",swap:"Swap RX / TX",swapSub:"If the board does not answer and the wiring is right, turn this on (TX=GPIO16, RX=GPIO17).",
 regMap:"Register map",plcCol:"PLC address",accessCol:"Access",accRW:"Read/write",accR:"Read only",accW:"Write only",plcSub:"\"Wire address\" = the table start address + the register number (0-based, as in Modbus Poll). \"PLC address\" is the same number in the 1-based form (00001, 10001, 30001, 40001) that many PLC tools and HMIs use. If your PLC reads one register off, set the start address to 1.",mbBaseTitle:"Table start addresses (PLC compatibility)",mbBaseSub:"Some PLCs or HMIs count addresses from 1, or only read inside a fixed range. Give each table's start address here; the board's map then sits on that range. If a hub (not a PLC) works with the board, keep all of them 0.",preset:"Preset",presetStd:"Standard: start at 0",presetOne:"Start at 1 (some PLCs and HMIs)",presetCustom:"Custom",baseCoil:"Coil start (relays)",baseDiscrete:"Discrete start (inputs)",baseInput:"Input start (status)",baseHolding:"Holding start",lenient:"Tolerate block reads outside the map",lenientSub:"When a PLC reads a block of which only part is in the board's map, answer the part outside with zeros (instead of exception 02). A request entirely outside the map still gets the exception.",
 wordSwap:"Word order: low word first",wordSwapSub:"For 32-bit values (uptime, relay cycles). Default: high word first.",table:"Table",addrCol:"Wire address",meaning:"Meaning",lossTitle:"Link loss",lossSub:"When nothing arrives from the server or the master for this long, this action runs once. 0 = off.",lossTimeout:"Timeout (s)",lossAction:"Action",lHold:"Keep outputs",lOff:"All relays OFF",lPreset:"Preset outputs",
-walk:"Walk test",identify:"Identify (blink LEDs)",onCount:"On",inputs:"Inputs",inputsSub:"live",dipAddress:"DIP address",relaySet:"Relay settings",minInterval:"Minimum interval per relay (ms)",stagger:"Coil stagger (ms)",name:"Name",powerOn:"After power-up",interlock:"Interlock with",pRestore:"Last state",pOff:"OFF",pOn:"ON",none:"—",
+walk:"Walk test",identify:"Identify (blink LEDs)",onCount:"On",inputs:"Inputs",inputsSub:"live",dipAddress:"Inputs AD1..AD7 value",relaySet:"Relay settings",minInterval:"Minimum interval per relay (ms)",stagger:"Coil stagger (ms)",name:"Name",powerOn:"After power-up",interlock:"Interlock with",pRestore:"Last state",pOff:"OFF",pOn:"ON",none:"—",
 pulse:"Pulse",sec:"s",notFitted:"Reserved (GPIO12)",cycles:"Cycles",
 general:"General",devName:"Device name",newAdmin:"New admin password (empty = keep)",apPass:"Config Wi-Fi password (empty = keep)",logLevel:"Serial log level",lvE:"Errors only",lvW:"Warnings",lvI:"Info",lvD:"Debug",
 firmware:"Firmware update",otaSub:"Pick the .bin exported by Arduino. The device restarts after installing it.",upload:"Install",otaFs:"This is the web UI image (LittleFS), not firmware",backup:"Settings backup",download:"Download",restore:"Restore",factory:"Factory reset",liveLog:"Live log",pause:"Pause",resume:"Resume",clear:"Clear",
@@ -572,7 +591,11 @@ function fill(){
     if(e.type==="checkbox")e.checked=!!v;else if(e.dataset.secret)e.value=v||"";else e.value=v==null?"":v});
   secretHints();modeUi();dipUi();presetUi();
 }
-function secretHints(){$$("[data-secret]").forEach(e=>{const f=e.dataset.secret;const set=f==="1"?true:S&&getP(S,f);e.placeholder=set?t("savedPass"):""})}
+function secretHints(){$$("[data-secret]").forEach(e=>{const f=e.dataset.secret;const set=f==="1"?true:S&&getP(S,f);e.placeholder=set?t("savedPass"):"";
+  if(f==="1")return;const base=f.slice(0,-"passSet".length);const host=e.closest("label")||e.parentNode;let b=host.querySelector(".clrp");
+  if(!b){b=el("button","btn sm clrp",t("clearPass"));b.type="button";b.style.marginTop="6px";host.appendChild(b);
+    b.onclick=ev=>{ev.preventDefault();setP(S,base+"pass","");setP(S,base+"clearPass",true);e.value="";e.placeholder=t("passCleared");b.classList.add("hide");dirty()}}
+  b.classList.toggle("hide",!set)})}
 function onInput(e){
   const k=e.target.dataset&&e.target.dataset.k;if(!k||!S)return;
   let v;const x=e.target;
@@ -597,7 +620,7 @@ function modeUi(){
 }
 // preset of the start addresses: all 0 = standard, all 1 = devices that count from 1, else custom
 function presetUi(){const b=(S&&S.mb&&S.mb.base)||[0,0,0,0];$("#mbPreset").value=b.every(x=>x===0)?"0":b.every(x=>x===1)?"1":"c"}
-function dipUi(){$("#manAddr").classList.toggle("hide",!!S.mb.fromDip);$("#dipAddr").classList.toggle("hide",!S.mb.fromDip)}
+function dipUi(){}
 /* ---------- servers ---------- */
 function field(lbl,key,type,extra){const l=el("label","f");l.appendChild(el("span",null,t(lbl)));let i;
   if(type==="select"){i=el("select","in");for(const [v,n] of extra){const o=el("option",null,t(n));o.value=v;i.appendChild(o)}i.dataset.num=""}
@@ -671,7 +694,11 @@ function buildRelays(){
   render();
 }
 async function relay(i,on){$("#rl"+i).classList.add("wait");try{await api("/api/relay",{r:i,on})}catch(e){toast(e.message==="busy"?t("busy"):e.message,"bad")}}
-async function pulse(i,s){if(!(s>0))return;try{await api("/api/relay",{r:i,pulseMs:Math.round(s*1000)});toast(t("sent"),"ok")}catch(e){toast(e.message,"bad")}}
+async function refreshState(){try{ST=await api("/api/state");render()}catch(e){}}
+async function pulse(i,s){if(!(s>0))return;try{await api("/api/relay",{r:i,pulseMs:Math.round(s*1000)});toast(t("sent"),"ok");
+  if(ST){ST.relays|=1<<i;render()}
+  setTimeout(refreshState,150);setTimeout(refreshState,Math.round(s*1000)+250);setTimeout(refreshState,Math.round(s*1000)+900)}catch(e){toast(e.message,"bad")}}
+setInterval(()=>{if(token&&!wsOk)refreshState()},1000);
 async function all(on){try{await api("/api/relay",{all:on})}catch(e){toast(e.message,"bad")}}
 function buildRelaySettings(){
   const tb=$("#rset");tb.innerHTML="";
@@ -724,7 +751,6 @@ function render(){
     const d=$("#dp"+i);if(d)d.classList.toggle("on",!!((ST.dip>>i)&1))}
   $("#onc").textContent=on;$("#donc").textContent=on+" / "+((ST.fitted||0).toString(2).split("1").length-1);
   const a=ST.dip&127;$("#dipv").textContent=a;$("#dipbin").textContent=a.toString(2).padStart(7,"0");
-  $("#dipAddr").textContent=t("dipAddress")+": "+a+(a<1||a>247?" ⚠":"");
   $("#cfgtx").textContent=t(ST.cfg?"on":"off");$("#cfgdot").className="dot "+(ST.cfg?"warn":"ok");
   $("#sup").textContent=fmtUp(ST.up);$("#sad").textContent=ST.addr||"—";$("#shp").textContent=Math.round(ST.heap/1024)+" KB";
   $("#srr").textContent=ST.reset;$("#sbt").textContent=ST.boots;$("#scl").textContent=ST.clients;
@@ -809,10 +835,45 @@ $("#walk").onclick=()=>api("/api/action",{do:ST.walk>=0?"walkStop":"walk"});$("#
 $("#lblShow").onclick=()=>{codeShown=!codeShown;renderLabel()};$("#lblPrint").onclick=()=>window.print();$("#lblSave").onclick=saveLabel;
 $("#mbPreset").onchange=e=>{const v=e.target.value;if(v==="c"||!S)return;S.mb.base=[+v,+v,+v,+v];fill();buildRegs();dirty()};
 $("#otaBtn").onclick=ota;$("#bkBtn").onclick=backup;$("#rsFile").onchange=e=>{if(e.target.files[0])restoreFile(e.target.files[0])};$("#facBtn").onclick=factoryDlg;
+$("#caClear").onclick=async()=>{try{await api("/api/ca",{pem:""});$("#ca").value="";toast(t("caCleared"),"ok");S=await api("/api/settings");$("#caState").textContent=t(S.caSet?"caSet":"caNone")}catch(e){toast(e.message,"bad")}};
 $("#caSave").onclick=async()=>{try{await api("/api/ca",{pem:$("#ca").value.trim()});toast(t("saved"),"ok");$("#caState").textContent=t($("#ca").value.trim()?"caSet":"caNone")}catch(e){toast(t("invalid")+"CA","bad")}};
 $("#logPause").onclick=()=>{logPaused=!logPaused;$("#logPause").textContent=t(logPaused?"resume":"pause")};$("#logClear").onclick=()=>{$("#log").innerHTML=""};
 window.addEventListener("beforeunload",e=>{if(S&&JSON.stringify(S)!==S0){e.preventDefault();e.returnValue=""}});
 buildNav();go("dash");applyLang();
+/* ---------- short hints that follow the mouse pointer ---------- */
+const TIPS={fa:{"wifi.ssid":"نام شبکهٔ وای‌فای (SSID). با دکمهٔ «جستجو» از فهرست انتخاب کن.","wifi.pass":"رمز وای‌فای. خالی بماند، رمز ذخیره‌شده تغییر نمی‌کند.","wifi.dhcp":"روشن: روتر خودش IP می‌دهد (پیشنهادی). خاموش: IP ثابت.","wifi.ip":"IP ثابت برد، مثل 192.168.1.50. فقط وقتی DHCP خاموش است.","wifi.gateway":"نشانی روتر (گیت‌وی)، مثل 192.168.1.1","wifi.subnet":"ماسک شبکه، معمولاً 255.255.255.0","wifi.dns1":"سرور DNS اصلی، مثل 8.8.8.8","wifi.dns2":"سرور DNS دوم (پشتیبان).","wifi.hostname":"نام برد در شبکه. حروف انگلیسی، عدد و خط تیره.","wifi.ntp":"سرور ساعت اینترنتی. اتصال امن (TLS) به ساعت درست نیاز دارد.","deviceName":"نامی دلخواه برای نمایش این ماژول در منو.","deviceId":"شناسهٔ یکتای دستگاه از فایل CSV پنل سازنده؛ همان نام کاربری سرور.","apiUrl":"نشانی HTTP هاب برای دریافت تنظیمات و آپدیت، مثل https://45.143.255.119","telemetryS":"هر چند ثانیه وضعیت رله‌ها به سرور فرستاده شود (پیش‌فرض ۳۰).","localEnabled":"روشن: کنترل مستقیم از شبکهٔ خانه با اپ، بدون اینترنت.","otaEnabled":"روشن: برد آپدیت نرم‌افزار را از سرور می‌پذیرد.","srv.enabled":"روشن: برد به این سرور وصل می‌شود.","srv.proto":"پلتفرم TiTiSwitch برای سرور خودمان؛ عمومی برای هر بروکر MQTT دیگر.","srv.name":"نامی دلخواه، فقط برای نمایش.","srv.host":"نشانی سرور، مثل 45.143.255.119","srv.port":"پورت سرور. با TLS معمولاً 8883 و بدون TLS معمولاً 1883.","srv.tls":"اتصال رمزشده. برای سرور خودمان روشن باشد (به گواهی CA نیاز دارد).","srv.user":"نام کاربری سرور. در پلتفرم همان شناسهٔ دستگاه است.","srv.pass":"رمز سرور. در پلتفرم همان device_secret فایل CSV. خالی = بدون تغییر.","srv.prefix":"پیشوند تاپیک‌ها. در پلتفرم TiTiSwitch خالی بگذار.","srv.clientId":"شناسهٔ اتصال MQTT. خالی = خودکار.","srv.keepalive":"هر چند ثانیه به سرور سلام بدهد تا قطع شدن فهمیده شود (پیش‌فرض ۳۰).","srv.qos":"تضمین تحویل پیام: 0 بدون تأیید، 1 حداقل یک‌بار با تأیید (پیش‌فرض).","mb.addr":"آدرس این برد در Modbus (۱ تا ۲۴۷). فقط برای RS-485.","mb.base":"آدرس اولین ثبات این جدول. 0 استاندارد؛ 1 برای PLCهایی که از 1 می‌شمارند.","mb.baud":"سرعت خط RS-485. باید با Master (PLC) یکی باشد.","mb.parity":"نوع Parity. باید با Master یکی باشد.","mb.stopBits":"تعداد Stop bit. باید با Master یکی باشد.","mb.respDelayMs":"تأخیر پاسخ (میلی‌ثانیه). برای Masterهای کند کمی زیاد کن.","mb.swap":"جای RX و TX را عوض می‌کند؛ اگر سیم‌ها برعکس بسته شده‌اند.","mb.wordSwap":"ترتیب دو کلمهٔ مقدارهای ۳۲ بیتی را برعکس می‌کند.","mb.lenient":"درخواستی که کمی از جدول بیرون است خطا نمی‌دهد و صفر برمی‌گرداند.","link.action":"کار رله‌ها وقتی ارتباط قطع شود: نگه‌داشتن، خاموش یا حالت از پیش تعیین‌شده.","link.timeoutS":"بعد از چند ثانیه بی‌ارتباطی، ارتباط «قطع» حساب شود.","relays.minIntervalMs":"حداقل فاصلهٔ دو تغییر پشت‌سرهم یک رله؛ از فرسایش کنتاکت جلوگیری می‌کند.","relays.staggerMs":"فاصلهٔ روشن شدن رله‌ها بعد از هم، تا جریان یک‌باره کشیده نشود.","rl.name":"نام رله برای نمایش، مثلاً «پمپ».","rl.powerOn":"وضعیت رله بعد از وصل برق: آخرین وضعیت، خاموش یا روشن.","rl.interlock":"رلهٔ مقابل (مثل بالا/پایین) که هم‌زمان با این روشن نمی‌شود.","system.adminPass":"رمز ورود به این منو. خالی بماند، تغییر نمی‌کند.","system.apPass":"رمز وای‌فای خود برد (TiTi-R8-xxxx)، حداقل ۸ نویسه. خالی = بدون تغییر.","system.logLevel":"جزئیات گزارش سریال: «خطا» کمترین، «اشکال‌زدایی» بیشترین.","#ca":"گواهی CA سرور خصوصی (فایل ca.crt). فقط ca.crt، هرگز ca.key.","#mbPreset":"آدرس شروع جدول‌ها را برای برند PLC یکجا تنظیم می‌کند.","#lpass":"رمز مدیر منو. پیش‌فرض کارخانه admin است.","#pulse":"مدت پالس به ثانیه: رله این‌قدر روشن می‌ماند و خودش خاموش می‌شود."},en:{"wifi.ssid":"Wi-Fi network name (SSID). Pick it from the list with the Scan button.","wifi.pass":"Wi-Fi password. Leave empty to keep the saved one.","wifi.dhcp":"On: the router gives the IP (recommended). Off: a fixed IP.","wifi.ip":"Fixed IP of the board, e.g. 192.168.1.50. Only when DHCP is off.","wifi.gateway":"Router address (gateway), e.g. 192.168.1.1","wifi.subnet":"Network mask, usually 255.255.255.0","wifi.dns1":"Primary DNS server, e.g. 8.8.8.8","wifi.dns2":"Secondary (backup) DNS server.","wifi.hostname":"Name of the board on the network. Letters, digits and hyphens.","wifi.ntp":"Internet time server. A secure (TLS) connection needs the right time.","deviceName":"A name for this module, shown in the menu.","deviceId":"Unique device ID from the maker panel CSV; also the server user name.","apiUrl":"HTTP address of the hub for settings and updates, e.g. https://45.143.255.119","telemetryS":"How often the relay state is sent to the server, in seconds (default 30).","localEnabled":"On: direct control from the home network with the app, without internet.","otaEnabled":"On: the board accepts software updates from the server.","srv.enabled":"On: the board connects to this server.","srv.proto":"TiTiSwitch platform for our own server; Generic for any other MQTT broker.","srv.name":"Any name, for display only.","srv.host":"Server address, e.g. 45.143.255.119","srv.port":"Server port. Usually 8883 with TLS and 1883 without.","srv.tls":"Encrypted connection. Keep it on for our server (needs the CA certificate).","srv.user":"Server user name. On the platform it is the device ID.","srv.pass":"Server password. On the platform it is the device_secret from the CSV. Empty = unchanged.","srv.prefix":"Topic prefix. Leave empty for the TiTiSwitch platform.","srv.clientId":"MQTT client ID. Empty = automatic.","srv.keepalive":"How often the board pings the server to notice a lost link (default 30 s).","srv.qos":"Delivery guarantee: 0 no acknowledgement, 1 at least once with acknowledgement (default).","mb.addr":"Modbus address of this board (1..247). RS-485 only.","mb.base":"Address of the first register of this table. 0 = standard; 1 for PLCs that count from 1.","mb.baud":"RS-485 line speed. Must match the master (PLC).","mb.parity":"Parity. Must match the master.","mb.stopBits":"Number of stop bits. Must match the master.","mb.respDelayMs":"Reply delay (ms). Raise it a little for slow masters.","mb.swap":"Swaps RX and TX, if the wires were connected the other way round.","mb.wordSwap":"Reverses the order of the two words of 32-bit values.","mb.lenient":"A request slightly outside the table returns zeros instead of an error.","link.action":"What the relays do when the link is lost: hold, switch off, or a preset state.","link.timeoutS":"After how many seconds without contact the link counts as lost.","relays.minIntervalMs":"Minimum time between two changes of one relay; protects the contacts.","relays.staggerMs":"Delay between relays switching on one after another, to avoid a current surge.","rl.name":"Relay name for display, e.g. \"Pump\".","rl.powerOn":"Relay state after power returns: last state, off or on.","rl.interlock":"The opposite relay (e.g. up/down) that may never be on together with this one.","system.adminPass":"Password of this menu. Leave empty to keep it.","system.apPass":"Wi-Fi password of the board itself (TiTi-R8-xxxx), at least 8 characters. Empty = unchanged.","system.logLevel":"Detail of the serial log: \"Error\" least, \"Debug\" most.","#ca":"CA certificate of a private server (the ca.crt file). Only ca.crt, never ca.key.","#mbPreset":"Sets the start addresses of all tables for a PLC brand at once.","#lpass":"Admin password of the menu. The factory default is admin.","#pulse":"Pulse length in seconds: the relay stays on this long, then switches off by itself."}};
+(function(){
+  const tip=document.createElement("div");tip.id="tip";document.body.appendChild(tip);
+  function keyOf(e){
+    if(e.id&&TIPS.en["#"+e.id])return "#"+e.id;
+    if(e.tagName==="INPUT"&&e.closest(".pulse"))return "#pulse";
+    let k=e.dataset&&e.dataset.k;if(!k)return null;
+    k=k.replace(/^servers\.\d+\./,"srv.").replace(/^relays\.items\.\d+\./,"rl.").replace(/^wifi\.nets\.\d+\.(ssid|pass)$/,"wifi.$1").replace(/^mb\.base\.\d+$/,"mb.base");
+    if(k==="srv.pass"||k==="wifi.pass")return k;
+    return TIPS.en[k]?k:null;
+  }
+  function target(n){
+    const c=n.closest&&n.closest("input,select,textarea,label");if(!c)return null;
+    if(c.tagName==="LABEL")return c.querySelector("input,select,textarea");
+    return c;
+  }
+  let cur=null;
+  function place(x,y){
+    const w=tip.offsetWidth,h=tip.offsetHeight;let l=x+14,tp=y+18;
+    if(l+w>innerWidth-6)l=Math.max(6,x-w-14);if(tp+h>innerHeight-6)tp=Math.max(6,y-h-14);
+    tip.style.left=l+"px";tip.style.top=tp+"px";
+  }
+  document.addEventListener("mouseover",ev=>{
+    const c=target(ev.target);if(c===cur)return;cur=c;
+    const k=c&&keyOf(c);const txt=k&&(TIPS[lang]&&TIPS[lang][k]||TIPS.en[k]);
+    if(!txt){tip.classList.remove("on");return}
+    tip.textContent=txt;tip.classList.add("on");place(ev.clientX,ev.clientY);
+  });
+  document.addEventListener("mousemove",ev=>{if(tip.classList.contains("on"))place(ev.clientX,ev.clientY)});
+  document.addEventListener("mouseout",ev=>{if(!ev.relatedTarget){cur=null;tip.classList.remove("on")}});
+  document.addEventListener("mousedown",()=>{tip.classList.remove("on")});
+  document.addEventListener("scroll",()=>{tip.classList.remove("on");cur=null},true);
+})();
 fetch("/api/info").then(r=>r.json()).then(j=>{info=j;$("#lname").textContent=j.name;$("#bfw").textContent="v"+j.fw+" · "+j.model;$("#dfw").textContent="FW "+j.fw;$("#dmac").textContent=j.mac;$("#fwv").textContent="v"+j.fw}).catch(()=>{});
 if(token)start();
 setInterval(()=>{if(!wsOk&&token&&!$("#app").classList.contains("hide"))api("/api/state").then(j=>{ST=j;render();info2()}).catch(()=>{})},1500);

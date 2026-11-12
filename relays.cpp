@@ -26,6 +26,7 @@ volatile uint8_t cur = 0;         // energised now
 uint8_t want = 0;                 // target
 uint8_t forced = 0;               // pending changes that skip the minimum interval
 uint8_t persisted = 0;
+bool noPersist = false;   // حالت تنظیمات: تست منو وضعیت ذخیره‌شده را عوض نمی‌کند
 uint32_t lastChange[RELAY_COUNT] = {0};
 uint32_t pulseUntil[RELAY_COUNT] = {0};
 uint32_t cycleCount[RELAY_COUNT] = {0};
@@ -63,7 +64,7 @@ void persist() {
   // رله‌ای که در حال پالس است «خاموش» ذخیره می‌شود: پس از قطع برق نباید روشن بماند.
   uint8_t v = cur & ~pulsing();
   uint32_t now = millis();
-  if (v != persisted && prefsOk && now - lastAnyChange >= RELAY_STATE_STABLE_MS &&
+  if (!noPersist && v != persisted && prefsOk && now - lastAnyChange >= RELAY_STATE_STABLE_MS &&
       (lastPersist == 0 || now - lastPersist >= RELAY_STATE_MIN_GAP_MS)) {
     prefs.putUChar("st", v);
     persisted = v;
@@ -184,7 +185,7 @@ void apply() {
 
 // راه‌اندازی: پایه‌ها ابتدا LOW می‌شوند (پیش از OUTPUT شدن) تا رله‌ها لحظه‌ای هم نپرند.
 // وضعیت اولیه از حالت «پس از وصل برق» هر رله و آخرین وضعیت ذخیره‌شده می‌آید؛ در حالت ایمن همه خاموش.
-void begin(bool safeMode) {
+void begin(bool safeMode, bool configMode) {
   queue = xQueueCreate(RELAY_QUEUE_LEN, sizeof(Cmd));
   for (uint8_t r = 0; r < RELAY_COUNT; r++) {
     if (!fitted(r)) continue;
@@ -205,6 +206,13 @@ void begin(bool safeMode) {
   if (safeMode) {
     LOGW("relay", "safe mode: all outputs stay OFF (stored 0x%02X)", last);
     m = 0;
+  }
+  // حالت تنظیمات (منو): همهٔ خروجی‌ها خاموش، و آنچه در منوی تست روشن و خاموش می‌شود ذخیره
+  // نمی‌شود؛ پس از خروج از منو، رله‌ها طبق «حالت پس از وصل برق» و وضعیت قبلی برمی‌گردند.
+  if (configMode) {
+    LOGI("relay", "config mode: all outputs OFF, the stored state 0x%02X is kept", last);
+    m = 0;
+    noPersist = true;
   }
   m &= fittedMask();
   // Applied by loop() with the stagger, so the coils do not all pull in at once.
