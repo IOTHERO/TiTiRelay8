@@ -393,7 +393,8 @@ RUN shows the **health of the module**, DATA shows the **link**:
 
 | LED | Meaning |
 |---|---|
-| RUN steady | config portal (and the first moments of start-up) |
+| RUN double blink (two short flashes every 2 s) | config portal |
+| RUN steady | only the first moments of start-up; steady all the time = a wiring / LED fault, or the program does not run (check the serial log) |
 | RUN slow blink (1 Hz) | healthy |
 | RUN fast blink (5 Hz) | fault: safe mode, invalid Modbus address, no server configured, free memory low |
 | DATA steady ON | connected to the server (Wi-Fi mode) / a Modbus master was heard in the last 5 s (RS-485) |

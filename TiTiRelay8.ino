@@ -301,7 +301,10 @@ uint32_t identifyUntil = 0;
 
 bool runLevel(uint32_t now) {
   switch (pattern) {
-    case RUN_STEADY: return true;
+    case RUN_STEADY: {                                          // حالت تنظیمات: دو چشمک کوتاه هر ۲ ثانیه
+      uint32_t t = now % 2000;                                  // (ثابت روشن = ایراد سیم‌کشی/LED، نه حالت)
+      return t < 150 || (t >= 300 && t < 450);
+    }
     case RUN_OK: return (now / LED_RUN_OK_HALF_MS) & 1;         // ۱ هرتز
     case RUN_FAULT: return (now / LED_RUN_FAULT_HALF_MS) & 1;   // ۵ هرتز
   }
@@ -333,7 +336,7 @@ void loop() {
 void run(Pattern p) {
   if (p == pattern) return;
   pattern = p;
-  LOGI("led", "RUN: %s", p == RUN_STEADY ? "steady (config mode)" : p == RUN_OK ? "slow blink (healthy)"
+  LOGI("led", "RUN: %s", p == RUN_STEADY ? "double blink (config mode)" : p == RUN_OK ? "slow blink (healthy)"
                                                                                : "fast blink (fault)");
 }
 void link(bool up) { linked = up; }

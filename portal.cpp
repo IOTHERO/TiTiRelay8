@@ -687,7 +687,11 @@ void loop() {
       walkAt = now;
     }
   }
-  if (now - lastPush >= PORTAL_PUSH_MS) {
+  static uint8_t lastRelays = 0xFF;
+  uint8_t relaysNow = relays::state();
+  // a relay that changes (a 1 s pulse included) is shown at once, not at the next 400 ms tick
+  if (relaysNow != lastRelays || now - lastPush >= PORTAL_PUSH_MS) {
+    lastRelays = relaysNow;
     lastPush = now;
     ws.cleanupClients(PORTAL_MAX_WS);
     pushState();
