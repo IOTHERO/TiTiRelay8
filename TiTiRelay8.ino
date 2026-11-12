@@ -3,15 +3,15 @@
 // =====================================================================================
 //
 //  این فایل «بدنهٔ اصلی» برنامه است و بخش‌های کوچک و پایه هم داخل همین فایل جمع شده‌اند:
-//    ۱) گزارش سریال (logx)        ۲) سلامت و Watchdog (health)     ۳) ورودی‌ها/دیپ‌سوئیچ (inputs)
+//    ۱) گزارش سریال (logx)        ۲) سلامت و Watchdog (health)     ۳) کلید کانفیگ (inputs)
 //    ۴) چراغ‌ها (leds)            ۵) کنسول خط تولید (console)      ۶) setup() و loop()
 //  بخش‌های بزرگ‌تر در فایل‌های جدا هستند (فهرست در core.h). همهٔ تنظیمات و پایه‌ها در config.h.
 //
 //  حالت‌های کار (در لحظهٔ روشن شدن تعیین می‌شود):
-//    کلید کانفیگ (دیپ ۸) روشن   ← منوی تنظیمات؛ وای‌فای «TiTi-R8-xxxx»، نشانی 192.168.1.100
-//    کلید کانفیگ خاموش          ← ارتباطی که در منو انتخاب شده:
-//        Wi-Fi  : MQTT به پلتفرم (قرارداد native) یا یک بروکر عمومی
-//        RS-485 : Modbus RTU Slave؛ آدرس از منو (دیپ AD1..AD7 ورودی آزاد است)
+//    کلید کانفیگ روشن   ← منوی تنظیمات؛ وای‌فای «TiTi-R8-xxxx»، نشانی 192.168.1.100
+//    کلید کانفیگ خاموش  ← ارتباطی که در منو انتخاب شده:
+//        شبکه   : MQTT از راه LAN (W5500) یا وای‌فای، مستقیم به پلتفرم یا به هاب مرکزی ساختمان
+//        RS-485 : Modbus RTU Slave؛ آدرس از منو
 //    اگر هنوز هیچ ارتباطی انتخاب نشده، حتی با کلید خاموش منوی تنظیمات باز می‌شود.
 //
 //  راه‌اندازی در Arduino IDE: برد «ESP32 Dev Module»، Partition Scheme «Minimal SPIFFS
@@ -235,32 +235,26 @@ void restart(const char* why) {
 }  // namespace health
 
 // =====================================================================================
-//  ۳) ورودی‌ها (inputs): دیپ‌سوئیچ آدرس و کلید کانفیگ
+//  ۳) ورودی‌ها (inputs): کلید کانفیگ (دیپ‌سوئیچ آدرس حذف شد؛ پایه‌هایش به W5500 رسید)
 //  هر ۱۰ میلی‌ثانیه خوانده می‌شود و تغییر باید ۵۰ میلی‌ثانیه ثابت بماند تا پذیرفته شود
 //  (حذف لرزش کلید). هنگام روشن شدن چند بار خوانده و رأی اکثریت گرفته می‌شود تا کلیدی که
 //  لحظهٔ روشن شدن می‌لرزد، حالت کار را اشتباه تعیین نکند.
 // =====================================================================================
 namespace inputs {
 namespace {
-volatile uint8_t stable = 0;    // مقدار پایدار: بیت ۰..۶ = AD1..AD7، بیت ۷ = کلید کانفیگ
+volatile uint8_t stable = 0;    // مقدار پایدار: بیت ۷ = کلید کانفیگ (بیت‌های ۰..۶ همیشه صفر)
 uint8_t candidate = 0;
 uint32_t candidateSince = 0;
 uint32_t lastSample = 0;
 bool atBoot = false;
 
 uint8_t sample() {
-  uint8_t v = 0;
-  for (uint8_t i = 0; i < ADDR_BITS; i++)
-    if (digitalRead(PIN_ADDR[i])) v |= 1 << i;
-  if (digitalRead(PIN_CONFIG)) v |= 0x80;
-  return v;
+  return digitalRead(PIN_CONFIG) ? 0x80 : 0;
 }
 }  // namespace
 
 void begin() {
-  // مقاومت‌های 4.7k پایین‌کش بیرونی هستند؛ GPIO34..39 اصلاً pull داخلی ندارند.
-  for (uint8_t i = 0; i < ADDR_BITS; i++) pinMode(PIN_ADDR[i], INPUT);
-  pinMode(PIN_CONFIG, INPUT);
+  pinMode(PIN_CONFIG, INPUT);                 // مقاومت 4.7k پایین‌کش بیرونی
   uint8_t votes[8] = {0};
   for (uint8_t n = 0; n < INPUT_BOOT_VOTES; n++) {
     uint8_t v = sample();
@@ -284,14 +278,12 @@ void loop() {
   } else if (v != stable && now - candidateSince >= INPUT_STABLE_MS) {
     uint8_t changed = v ^ stable;
     stable = v;
-    if (changed & 0x7F) LOGI("dip", "address switches now %u", v & 0x7F);
-    if (changed & 0x80) LOGI("dip", "config switch %s", (v & 0x80) ? "ON" : "OFF");
+    if (changed & 0x80) LOGI("cfg", "config switch %s", (v & 0x80) ? "ON" : "OFF");
   }
 }
 
 bool configAtBoot() { return atBoot; }
 bool configOn() { return stable & 0x80; }
-uint8_t address() { return stable & 0x7F; }
 uint8_t raw() { return stable; }
 }  // namespace inputs
 

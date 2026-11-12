@@ -4,7 +4,7 @@
 //
 //  همهٔ چیزهایی که قابل تنظیم هستند در همین فایل جمع شده‌اند:
 //    ۱) هویت و نسخهٔ Firmware
-//    ۲) پایه‌های سخت‌افزار (رله‌ها، LED، RS-485، دیپ‌سوئیچ)
+//    ۲) پایه‌های سخت‌افزار (رله‌ها، LED، RS-485، کلید کانفیگ، LAN)
 //    ۳) زمان‌بندی‌ها و محدودیت‌های هر بخش (Watchdog، Wi-Fi، MQTT، Modbus، ...)
 //    ۴) مقدارهای پیش‌فرض تنظیمات (پس از ریست کارخانه همین‌ها برقرار می‌شوند)
 //    ۵) ساختار تنظیماتی که کاربر از منوی وب عوض می‌کند (struct Settings)
@@ -60,14 +60,25 @@ static constexpr uint8_t PIN_RS485_SE = 4;
 static constexpr uint8_t PIN_RS485_RX = 16;
 static constexpr uint8_t PIN_RS485_TX = 17;
 
-// --- دیپ‌سوئیچ (U6) ---------------------------------------------------------------------
-// پایهٔ COMMON به +3.3V وصل است و هر خط یک مقاومت 4.7k پایین‌کش دارد: کلید روشن = HIGH.
-// AD1..AD7 ورودی‌های آزادند (خوانده و در منو و Modbus گزارش می‌شوند)؛ AD8 = کلید حالت تنظیمات.
-// آدرس Modbus از منو تنظیم می‌شود، نه از دیپ‌سوئیچ.
-// توجه: GPIO34 و 35 و 36 و 39 فقط ورودی‌اند و pull-up داخلی ندارند (مقاومت بیرونی لازم است).
-static constexpr uint8_t ADDR_BITS = 7;
-static constexpr uint8_t PIN_ADDR[ADDR_BITS] = {36, 39, 34, 35, 32, 33, 25};
-static constexpr uint8_t PIN_CONFIG = 26;                    // AD8: کلید کانفیگ
+// --- کلید کانفیگ ------------------------------------------------------------------------
+// دیپ‌سوئیچ آدرس (AD1..AD7) حذف شد: آدرس Modbus از منو است و پایه‌های آزادشده به ماژول LAN
+// (W5500) رسیدند. فقط کلید حالت تنظیمات می‌ماند: COMMON به +3.3V، مقاومت 4.7k پایین‌کش، روشن = HIGH.
+static constexpr uint8_t PIN_CONFIG = 26;                    // کلید کانفیگ (همان AD8 قبلی)
+
+// --- LAN: ماژول W5500 روی SPI (پایه‌های دیپ‌سوئیچ قبلی) ----------------------------------
+// SCK، MOSI و CS خروجی‌اند؛ MISO و INT ورودی (GPIO34..39 فقط ورودی‌اند و برای همین مناسب‌اند).
+// RST وصل نیست (W5500 با برق خودش ریست می‌شود)؛ اگر روی برد سیم شد، شمارهٔ پایه را بدهید.
+// GPIO36 و GPIO39 آزاد می‌مانند (فقط ورودی). برد بدون W5500: HAS_LAN را 0 کنید.
+#ifndef HAS_LAN
+#define HAS_LAN 1
+#endif
+static constexpr int8_t PIN_ETH_SCK  = 25;
+static constexpr int8_t PIN_ETH_MOSI = 33;
+static constexpr int8_t PIN_ETH_CS   = 32;
+static constexpr int8_t PIN_ETH_MISO = 35;
+static constexpr int8_t PIN_ETH_INT  = 34;
+static constexpr int8_t PIN_ETH_RST  = -1;
+static constexpr uint32_t LAN_LINK_WAIT_MS = 8000;           // حالت خودکار: این‌قدر منتظر کابل، بعد وای‌فای
 
 // -------------------------------------------------------------------------------------
 //  ۳) سریال، گزارش (Log) و چراغ‌ها
@@ -85,9 +96,9 @@ static constexpr uint16_t LED_IDENTIFY_HALF_MS = 80;         // چشمک دوت�
 static constexpr uint16_t LED_ACTIVITY_MS = 60;              // مدت یک جرقهٔ DATA هنگام پیام یا فریم
 
 // -------------------------------------------------------------------------------------
-//  ۴) ورودی‌ها (دیپ‌سوئیچ) و سلامت سیستم
+//  ۴) ورودی‌ها (کلید کانفیگ) و سلامت سیستم
 // -------------------------------------------------------------------------------------
-static constexpr uint16_t INPUT_SAMPLE_MS = 10;              // هر چند ms دیپ‌سوئیچ خوانده شود
+static constexpr uint16_t INPUT_SAMPLE_MS = 10;              // هر چند ms کلید کانفیگ خوانده شود
 static constexpr uint16_t INPUT_STABLE_MS = 50;              // تغییر باید این‌قدر ثابت بماند تا قبول شود (حذف لرزش کلید)
 static constexpr uint8_t  INPUT_BOOT_VOTES = 9;              // هنگام روشن شدن چند بار خوانده شود (رأی اکثریت)
 static constexpr uint8_t  INPUT_BOOT_VOTE_GAP_MS = 5;        // فاصلهٔ بین دو خواندن هنگام روشن شدن
@@ -231,7 +242,8 @@ static constexpr uint16_t DEFAULT_LINK_TIMEOUT_S = 0;        // 0 = غیرفعا
 // -------------------------------------------------------------------------------------
 //  ۱۲) ساختار تنظیمات (آنچه از منو تنظیم و در حافظه ذخیره می‌شود)
 // -------------------------------------------------------------------------------------
-enum LinkMode : uint8_t { MODE_UNSET = 0, MODE_WIFI = 1, MODE_RS485 = 2 };             // نوع ارتباط
+enum LinkMode : uint8_t { MODE_UNSET = 0, MODE_WIFI = 1, MODE_RS485 = 2 };             // نوع ارتباط (WIFI = شبکه: وای‌فای یا LAN)
+enum NetMode : uint8_t { NET_AUTO = 0, NET_WIFI = 1, NET_LAN = 2 };                     // کدام شبکه در حالت MQTT
 enum PowerOn : uint8_t { PON_RESTORE = 0, PON_OFF = 1, PON_ON = 2 };                    // حالت رله پس از وصل برق
 enum LinkLoss : uint8_t { LOSS_HOLD = 0, LOSS_ALL_OFF = 1, LOSS_PRESET = 2 };           // اقدام هنگام قطع ارتباط
 enum ServerProto : uint8_t { PROTO_PLATFORM = 0, PROTO_GENERIC = 1 };                   // پلتفرم TiTiSwitch یا MQTT عمومی
@@ -284,7 +296,8 @@ struct Settings {
   bool otaEnabled;        // پذیرش آپدیت Firmware از پلتفرم
 
   // --- RS-485 / Modbus RTU Slave ---
-  uint8_t mbAddrFromDip;  // قدیمی، استفاده نمی‌شود (جای آن در Blob تنظیمات می‌ماند)
+  uint8_t netMode;        // NetMode: 0 خودکار (LAN اگر کابل وصل است، وگرنه وای‌فای)، 1 فقط وای‌فای، 2 فقط LAN
+                          // (همان جای «آدرس از دیپ» قدیمی در Blob؛ مقدار قدیمی 0 = خودکار)
   uint8_t mbAddr;
   uint32_t mbBaud;
   uint8_t mbParity;       // 0 بدون، 1 زوج، 2 فرد

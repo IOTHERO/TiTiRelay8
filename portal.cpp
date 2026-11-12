@@ -2,7 +2,7 @@
 //  portal.cpp — منوی تنظیمات (وب)
 // =====================================================================================
 //
-//  وقتی کلید کانفیگ (دیپ ۸) هنگام روشن شدن روشن باشد (یا هنوز هیچ ارتباطی انتخاب نشده)، برد
+//  وقتی کلید کانفیگ هنگام روشن شدن روشن باشد (یا هنوز هیچ ارتباطی انتخاب نشده)، برد
 //  یک شبکهٔ وای‌فای «TiTi-R8-xxxx» می‌سازد (نشانی 192.168.1.100، رمز در config.h) و منو را نشان می‌دهد.
 //
 //  ● ظاهر منو (data/index.html و data/static/qr.js) روی حافظهٔ LittleFS است و از آنجا خوانده می‌شود.
@@ -86,6 +86,7 @@ void toJson(const Settings& s, JsonObject o, bool withSecrets) {
     if (withSecrets) n["pass"] = s.nets[i].pass;
   }
   w["dhcp"] = s.dhcp;
+  w["netMode"] = s.netMode;
   w["ip"] = ipStr(s.ip);
   w["gateway"] = ipStr(s.gateway);
   w["subnet"] = ipStr(s.subnet);
@@ -117,7 +118,6 @@ void toJson(const Settings& s, JsonObject o, bool withSecrets) {
   o["localEnabled"] = s.localEnabled;
   o["otaEnabled"] = s.otaEnabled;
   JsonObject m = o["mb"].to<JsonObject>();
-  m["fromDip"] = s.mbAddrFromDip;
   m["addr"] = s.mbAddr;
   m["baud"] = s.mbBaud;
   m["parity"] = s.mbParity;
@@ -171,6 +171,7 @@ void fromJson(Settings& s, JsonObjectConst o) {
       if (n["clearPass"] | false) s.nets[i].pass[0] = 0;
     }
     num(w, "dhcp", s.dhcp);
+    num(w, "netMode", s.netMode);
     ipFrom(w, "ip", s.ip);
     ipFrom(w, "gateway", s.gateway);
     ipFrom(w, "subnet", s.subnet);
@@ -205,7 +206,6 @@ void fromJson(Settings& s, JsonObjectConst o) {
   num(o, "otaEnabled", s.otaEnabled);
   JsonObjectConst m = o["mb"];
   if (m) {
-    num(m, "fromDip", s.mbAddrFromDip);
     num(m, "addr", s.mbAddr);
     num(m, "baud", s.mbBaud);
     num(m, "parity", s.mbParity);
@@ -328,7 +328,6 @@ void buildState(JsonDocument& d, bool withLog) {
   d["fitted"] = relays::fittedMask();
   JsonArray cyc = d["cycles"].to<JsonArray>();
   for (uint8_t r = 0; r < RELAY_COUNT; r++) cyc.add(relays::cycles(r));
-  d["dip"] = inputs::raw();
   d["addr"] = settings::modbusAddress();
   d["cfg"] = inputs::configOn();
   d["up"] = millis() / 1000;
@@ -343,6 +342,9 @@ void buildState(JsonDocument& d, bool withLog) {
   w["ip"] = net::ip();
   w["ssid"] = net::ssid();
   w["rssi"] = net::rssi();
+  w["lan"] = net::lan();
+  w["cable"] = net::lanLink();
+  w["lanFitted"] = HAS_LAN;
   d["mqttTest"] = cloud::testResult();
   d["clients"] = WiFi.softAPgetStationNum();
   d["localKey"] = local::keySet();
@@ -435,7 +437,7 @@ void routes() {
     d["fw"] = FW_VERSION;
     d["model"] = FW_MODEL;
     d["name"] = settings::cur.deviceName;
-    d["mac"] = WiFi.macAddress();
+    d["mac"] = net::mac();
     sendJson(r, 200, d);
   });
 

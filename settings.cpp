@@ -129,7 +129,7 @@ void defaults(Settings& s) {
   s.telemetryS = DEFAULT_TELEMETRY_S;
   s.localEnabled = true;
   s.otaEnabled = true;
-  s.mbAddrFromDip = 0;   // دیگر استفاده نمی‌شود: آدرس فقط از منو
+  s.netMode = NET_AUTO;  // LAN اگر کابل وصل است، وگرنه وای‌فای
   s.mbAddr = DEFAULT_MB_ADDR;
   s.mbBaud = DEFAULT_MB_BAUD;
   s.mbParity = DEFAULT_MB_PARITY;
@@ -163,7 +163,11 @@ bool validate(Settings& s, String& err) {
   if (s.mode > MODE_RS485) { err = "mode"; return false; }
   if (!printable(s.deviceName)) { err = "deviceName"; return false; }
   if (s.mode == MODE_WIFI) {
-    if (!s.nets[0].ssid[0]) { err = "wifi.ssid"; return false; }
+    // با کابل LAN وای‌فای لازم نیست؛ «فقط وای‌فای» (یا برد بدون W5500) شبکهٔ وای‌فای می‌خواهد
+    if (!s.nets[0].ssid[0] && (s.netMode == NET_WIFI || !HAS_LAN)) {
+      err = "wifi.ssid";
+      return false;
+    }
     bool any = false;
     for (uint8_t i = 0; i < MAX_SERVERS; i++) {
       ServerCfg& v = s.servers[i];
@@ -189,6 +193,7 @@ bool validate(Settings& s, String& err) {
   size_t au = strlen(s.apiUrl);
   if (au && s.apiUrl[au - 1] == '/') s.apiUrl[au - 1] = 0;     // اسلش انتهای نشانی حذف شود
   if (s.telemetryS < 5 || s.telemetryS > 3600) { err = "telemetryS"; return false; }
+  if (s.netMode > NET_LAN) { err = "netMode"; return false; }
 
   // --- Modbus ---
   bool baudOk = false;
@@ -380,9 +385,9 @@ bool setCaPem(const String& pem) {
 // -------------------------------------------------------------------------------------
 //  توابع کمکی
 // -------------------------------------------------------------------------------------
-// آدرس Slave در Modbus RTU فقط از منو (۱ تا ۲۴۷). دیپ‌سوئیچ‌های AD1..AD7 آزادند و فقط به‌عنوان
-// ورودی خوانده و گزارش می‌شوند. این آدرس فقط برای RS-485 است: در Wi-Fi/MQTT هر برد با شناسهٔ
-// یکتای خودش (device_id) شناخته می‌شود و دو برد با آدرس یکسان با هم تداخلی ندارند.
+// آدرس Slave در Modbus RTU فقط از منو (۱ تا ۲۴۷)؛ دیپ‌سوئیچ آدرس دیگر روی برد نیست. این آدرس فقط
+// برای RS-485 است: در شبکه (وای‌فای یا LAN) هر برد با شناسهٔ یکتای خودش (device_id) شناخته می‌شود و
+// دو برد با آدرس یکسان تداخلی ندارند.
 uint8_t modbusAddress() {
   return cur.mbAddr >= 1 && cur.mbAddr <= 247 ? cur.mbAddr : 0;
 }

@@ -210,6 +210,30 @@ void load(JsonDocument* d) {
 }
 }  // namespace
 
+bool setClock(const char* iso, bool force) {
+  if (!iso || !*iso) return false;
+  struct tm tm = {};
+  if (sscanf(iso, "%d-%d-%dT%d:%d:%d", &tm.tm_year, &tm.tm_mon, &tm.tm_mday, &tm.tm_hour,
+             &tm.tm_min, &tm.tm_sec) != 6)
+    return false;
+  tm.tm_year -= 1900;
+  tm.tm_mon -= 1;
+  setenv("TZ", "UTC0", 1);
+  tzset();
+  time_t t = mktime(&tm);
+  time_t now = time(nullptr);
+  // a valid clock is moved only when told to (the hub) and only when it is more than 5 s off
+  if (net::timeValid() && (!force || (now > t ? now - t : t - now) <= 5)) return false;
+  struct timeval tv = {t, 0};
+  settimeofday(&tv, nullptr);
+  LOGI("rules", "clock set from the %s", force ? "hub" : "server");
+  return true;
+}
+
+void setOffset(int32_t minutes) {
+  if (minutes >= -720 && minutes <= 840) offsetMin = minutes;
+}
+
 void begin() {
   mtx = xSemaphoreCreateMutex();
   for (Run& r : runs) r.rule = -1;
@@ -240,20 +264,7 @@ void apply(const char* json, size_t len) {
     return;
   }
   // A module without NTP takes the server's clock.
-  const char* st = (*d)["server_time"] | "";
-  if (*st && !net::timeValid()) {
-    struct tm tm = {};
-    if (sscanf(st, "%d-%d-%dT%d:%d:%d", &tm.tm_year, &tm.tm_mon, &tm.tm_mday, &tm.tm_hour,
-               &tm.tm_min, &tm.tm_sec) == 6) {
-      tm.tm_year -= 1900;
-      tm.tm_mon -= 1;
-      setenv("TZ", "UTC0", 1);
-      tzset();
-      struct timeval tv = {mktime(&tm), 0};
-      settimeofday(&tv, nullptr);
-      LOGI("rules", "clock set from the server");
-    }
-  }
+  setClock((*d)["server_time"] | "", false);
   bool same = !strcmp((*d)["version"] | "", ver) && doc;
   xSemaphoreTake(mtx, portMAX_DELAY);
   if (!same) {

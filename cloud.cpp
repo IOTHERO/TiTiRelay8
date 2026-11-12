@@ -215,6 +215,14 @@ void onCommand(const char* data, int len) {
       return;
     }
   }
+  if (!strcmp(o["tag"] | "", "identify")) {           // پیدا کردن برد: هر دو چراغ ۱۰ ثانیه چشمک
+    leds::identify(10000);
+    if (*id) {
+      remember(id, 1, -1, true);
+      sendAck(id, "done", -1, true, nullptr);
+    }
+    return;
+  }
   if (*id || o["tag"].is<const char*>()) {
     int r = relayFromTag(o["tag"]);
     int v = boolValue(o["value"]);

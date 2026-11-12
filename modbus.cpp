@@ -10,14 +10,14 @@
 //
 //  ── نقشهٔ رجیسترها (شماره‌ها «داخلی» هستند؛ آدرس روی سیم = آدرس شروع جدول + شمارهٔ داخلی) ──
 //   Coil     0..7     رله‌های ۱ تا ۸                                      (FC1، FC5، FC15)
-//   Discrete 0..6     دیپ AD1..AD7؛  7 = کلید کانفیگ                         (FC2)
+//   Discrete 0..6     رزرو (۰)؛      7 = کلید کانفیگ                         (FC2)
 //   Holding  0        ماسک رله‌ها (بیت ۰ = رله ۱)                            (FC3، FC6، FC16)
 //            1        فرمان: 1 = همه خاموش، 2 = شناسایی (چراغ‌ها ۱۰ ثانیه چشمک)
 //            2..9     پالس رله ۱ تا ۸ (مقدار × ۰٫۱ ثانیه؛ نوشتن، پالس را شروع می‌کند)
 //            10..19   رزرو (خطای 02)
 //            20..27   هر رله یک رجیستر: 0 = خاموش، 1 = روشن (برای PLC بدون دسترسی به Coil)
 //   Input    0        ماسک رله‌ها در این لحظه                                (FC4)
-//            1 دیپ خام، 2 آدرس Slave، 3 نسخهٔ Firmware (major<<8 | minor)
+//            1 کلید کانفیگ (بیت ۷)، 2 آدرس Slave، 3 نسخهٔ Firmware (major<<8 | minor)
 //            4..5     زمان کارکرد (ثانیه، ۳۲ بیتی)
 //            6, 7     فریم سالم، خطای CRC
 //            8, 9     تعداد بوت، حالت ایمن
@@ -113,7 +113,7 @@ int idxOf(uint8_t table, uint32_t wire) {
 
 bool readBit(uint8_t table, uint16_t idx) {
   if (table == MB_T_COIL) return (relays::state() >> idx) & 1;
-  return (inputs::raw() >> idx) & 1;               // Discrete: دیپ و کلید کانفیگ
+  return (inputs::raw() >> idx) & 1;               // Discrete: کلید کانفیگ (بیت ۷)
 }
 
 uint16_t holding(uint16_t idx) {
@@ -313,7 +313,7 @@ void taskMain(void*) {
   bool warnedAddr = false;
   while (running) {
     health::feed();
-    addr = settings::modbusAddress();              // دیپ‌سوئیچ هر لحظه قابل تغییر است
+    addr = settings::modbusAddress();              // آدرس منو ممکن است عوض شده باشد
     if (addr == 0 && !warnedAddr) {
       LOGE("modbus", "invalid slave address: set the Modbus address (1..247) in the config menu");
       warnedAddr = true;

@@ -163,10 +163,10 @@ the production console erases the identity.
 |---|---|
 | `config.h` | **All settings in one place**, with Persian comments: identity, pins, timings and limits of every part, the defaults, and the `Settings` structure |
 | `core.h` | The interfaces between the parts (what each part offers to the others); light on purpose, no heavy libraries |
-| `TiTiRelay8.ino` | Main program, plus the small basics: serial log, health/watchdog, inputs (DIP), LEDs, the production console |
+| `TiTiRelay8.ino` | Main program, plus the small basics: serial log, health/watchdog, the config switch, LEDs, the production console |
 | `settings.cpp` | Saving and loading the settings (versioned, update-safe), identity backup, label, CA |
 | `relays.cpp` | Relays: command queue, interlock, pulse, spacing, state saving |
-| `net.cpp` | Wi-Fi and the clock |
+| `net.cpp` | LAN (W5500) and Wi-Fi, automatic choice, and the clock |
 | `cloud.cpp` | MQTT link to the servers |
 | `hubapi.cpp` | HTTPS to the hub: local key, rules, firmware update |
 | `local.cpp` | Local control over the home Wi-Fi |
@@ -185,25 +185,51 @@ To change a pin, a timing or a default, edit `config.h` only. (The files were me
 | LED DATA / RUN | 14 / 27 |
 | RS-485 DE+RE (SE) | 4 |
 | RS-485 RX ← RO (U2RXD) / TX → DI (U2TXD) | 16 / 17; "Swap RX/TX" in the portal if a board is wired the other way |
-| DIP AD1..AD7 (address, AD1 = bit 0) | 36, 39, 34, 35, 32, 33, 25 |
-| DIP AD8 = config switch | 26 |
+| Config switch (the old DIP 8) | 26 |
+| LAN W5500 (SPI): SCK / MOSI / CS | 25 / 33 / 32 |
+| LAN W5500: MISO / INT | 35 / 34 (input-only pins) |
+| LAN W5500: RST | not wired (`PIN_ETH_RST -1`; give a GPIO if the board has one) |
+| Free (input only) | 36, 39 |
+
+The address DIP switch (AD1..AD7) is gone: the Modbus address is set in the portal, and its pins
+drive the W5500 LAN module. Only the config switch stays. A board without a W5500 is built with
+`HAS_LAN 0` in `config.h` (Wi-Fi only). PCB changes for the LAN version: `docs/hardware-lan-rev-fa.md`.
+
+## Network: LAN (W5500) or Wi-Fi, straight to the server or behind a central hub
+
+**Network** setting in the portal: *Automatic* (default: the LAN cable when one is plugged in,
+else Wi-Fi; switches when the cable comes or goes), *Wi-Fi only*, *LAN only*. With a cable no
+Wi-Fi network is needed. The static IP, when set, applies to whichever network is in use.
+MQTT and local control work the same on both.
+
+The same board works two ways, with the same settings except the server address:
+
+| | Server 1 in the portal | Topics |
+|---|---|---|
+| **Standalone** (no hub bought) | the platform server, port 8883, TLS | `d/<id>/...` straight to the server |
+| **Behind the central hub** | the hub's LAN address, port 1883, no TLS, empty prefix | `d/<id>/...` to the hub, which carries them as `h/<hub>/up` |
+
+Put the server as server 2 behind a hub: if the hub is down the board falls back to the server.
+The server routes each command the way the board was last heard (hub or direct). Behind a hub,
+the hub gives the clock (`config` message `{"type": "time", ...}`) because there may be no
+internet for NTP; the command tag `identify` blinks both LEDs for 10 s.
 
 ## Scenario
 
-1. **Config switch (DIP 8) ON, power up** → config mode: RUN LED blinks fast. The board opens
+1. **Config switch ON, power up** → config mode: RUN LED blinks fast. The board opens
    Wi-Fi `TiTi-R8-XXXX` (default password `titi1234`). Connect to it and open
    `http://192.168.1.100/`. A captive portal opens it by itself on most phones. Admin password:
    `admin` (change it on the System page).
-2. **Connection** page: choose **Wi-Fi / MQTT** or **RS-485 / Modbus RTU**.
-3. Wi-Fi: scan, pick the network, enter the password, optional backup network, DHCP or static IP,
+2. **Connection** page: choose **Network / MQTT** or **RS-485 / Modbus RTU**.
+3. Network: LAN, Wi-Fi or automatic; Wi-Fi: scan, pick the network, enter the password, optional backup network, DHCP or static IP,
    NTP. Then the servers: up to 4, tried in order. Each server has protocol, host, port, TLS,
    user/password, client id, topic prefix, keepalive and QoS. **Save**, then **Test Wi-Fi** /
    **Test** a server.
-4. RS-485: address from the DIP switch (live) or manual, baud, parity, stop bits, response delay,
+4. RS-485: the Modbus address (1..247), baud, parity, stop bits, response delay,
    RX/TX swap. The register map is on the page.
 5. Both modes: **link loss** action (keep, all OFF, preset) after N seconds without server/master.
 6. **Relays & test**: one button per relay, live state, pulse, all ON/OFF, walk test, identify,
-   live DIP/config inputs. Relay settings: name, power-on behaviour (last state / OFF / ON),
+   the live config switch and LAN cable. Relay settings: name, power-on behaviour (last state / OFF / ON),
    interlock pairs, minimum interval, coil stagger.
 7. **Restart**: the dialog shows the config switch live and asks whether it was turned off.
    With it OFF the board starts in the chosen mode.
@@ -290,7 +316,7 @@ number most PLC tools and HMIs use (Siemens MB_MASTER / MB_CLIENT, Delta, Schnei
 | Table | Address | PLC | Access | Meaning |
 |---|---|---|---|---|
 | Coil (FC1/5/15) | 0..7 | 00001..00008 | read/write | relays 1..8 |
-| Discrete input (FC2) | 0..6 | 10001..10007 | read | DIP AD1..AD7 |
+| Discrete input (FC2) | 0..6 | 10001..10007 | read | reserved (always 0; the address DIP switch was removed) |
 | Discrete input | 7 | 10008 | read | config switch |
 | Holding (FC3/6/16) | 0 | 40001 | read/write | relay mask (bit 0 = relay 1) |
 | Holding | 1 | 40002 | write | 1 = all OFF, 2 = identify |
@@ -298,7 +324,7 @@ number most PLC tools and HMIs use (Siemens MB_MASTER / MB_CLIENT, Delta, Schnei
 | Holding | 10..19 | 40011..40020 | – | reserved (exception 02) |
 | Holding | 20..27 | 40021..40028 | read/write | relay 1..8, one register each: 0 = OFF, 1 = ON (for PLCs without coil access) |
 | Input (FC4) | 0 | 30001 | read | relay mask now |
-| Input | 1, 2, 3 | 30002..30004 | read | DIP raw, slave address, firmware version |
+| Input | 1, 2, 3 | 30002..30004 | read | config switch (bit 7), slave address, firmware version |
 | Input | 4..5 | 30005..30006 | read | uptime s (32-bit) |
 | Input | 6, 7 | 30007, 30008 | read | good frames, CRC errors |
 | Input | 8, 9 | 30009, 30010 | read | boot count, safe mode |
@@ -309,7 +335,8 @@ them for PLCs that expect that order. The product template's `modbus_rtu` bindin
 the default order.
 
 Also FC8 sub-function 0 (echo). Broadcast (address 0) writes are carried out without a reply.
-Address 0 from the DIP switch is invalid: the board does not answer and the RUN LED shows a fault.
+An invalid address (not 1..247) is refused by the portal; the board does not answer then and the
+RUN LED shows a fault.
 
 ### Start addresses and PLC compatibility
 
@@ -351,9 +378,10 @@ addresses 0..), leave every start address at 0, or change the binding addresses 
 - All relay changes go through one queue in the main loop: the per-relay minimum interval
   (anti-chatter), a coil stagger (inrush), interlock pairs (partner released first).
 - Relay ON-cycle counters (relay wear), saved every 10 min and before a restart.
-- Wi-Fi reconnect with back-off and a backup network; MQTT LWT, server failover.
+- LAN (W5500) or Wi-Fi with automatic choice; Wi-Fi reconnect with back-off and a backup network;
+  MQTT LWT, server failover (hub first, then the server).
 - Modbus frames are found by length and line silence (t3.5); frames for other slaves are skipped.
-- DIP inputs debounced; the config switch is read by majority vote at power-up.
+- The config switch is debounced and read by majority vote at power-up.
 - Serial log: level per setting, one line per event, repeats folded
   ("previous message repeated N times"). The last lines also show in the portal.
 - Portal: login with lockout, session tokens, settings validation, backup/restore, OTA,
@@ -367,7 +395,7 @@ RUN shows the **health of the module**, DATA shows the **link**:
 |---|---|
 | RUN steady | config portal (and the first moments of start-up) |
 | RUN slow blink (1 Hz) | healthy |
-| RUN fast blink (5 Hz) | fault: safe mode, invalid Modbus address (DIP = 0), no server configured, free memory low |
+| RUN fast blink (5 Hz) | fault: safe mode, invalid Modbus address, no server configured, free memory low |
 | DATA steady ON | connected to the server (Wi-Fi mode) / a Modbus master was heard in the last 5 s (RS-485) |
 | DATA off | no connection (RUN still blinks slowly: the module itself is fine) |
 | DATA flicker | a message or frame: a short OFF while connected, a short ON while not |

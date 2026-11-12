@@ -65,15 +65,14 @@ void restart(const char* why); // وضعیت را ذخیره می‌کند و ر
 }
 
 // -------------------------------------------------------------------------------------
-//  ورودی‌ها: دیپ‌سوئیچ آدرس (AD1..AD7) و کلید کانفیگ (AD8) با حذف لرزش
+//  ورودی‌ها: کلید کانفیگ با حذف لرزش (دیپ‌سوئیچ آدرس حذف شد)
 // -------------------------------------------------------------------------------------
 namespace inputs {
 void begin();
 void loop();                 // هر ۱۰ms نمونه می‌گیرد؛ تغییر باید ۵۰ms ثابت بماند
 bool configAtBoot();         // هنگام روشن شدن خوانده می‌شود: کلید کانفیگ حالت کار را تعیین می‌کند
 bool configOn();             // وضعیت زندهٔ کلید کانفیگ
-uint8_t address();           // AD1..AD7 به صورت عدد (AD1 = بیت ۰)
-uint8_t raw();               // بیت ۰..۶ = AD1..AD7، بیت ۷ = کلید کانفیگ
+uint8_t raw();               // بیت ۷ = کلید کانفیگ (Modbus همان بیت را گزارش می‌کند)
 }
 
 // -------------------------------------------------------------------------------------
@@ -143,10 +142,13 @@ namespace net {
 void begin(bool keepAp);     // keepAp: منوی تنظیمات هم‌زمان بالا می‌ماند (AP + STA)
 void loop();
 void stop();
-bool up();
-int rssi();
+bool up();                   // شبکه (وای‌فای یا LAN) آدرس دارد
+bool lan();                  // اتصال فعلی از راه کابل LAN (W5500) است
+bool lanLink();              // کابل LAN وصل است (لینک)
+int rssi();                  // فقط وای‌فای؛ روی LAN صفر
 String ip();
-String ssid();
+String ssid();               // روی LAN: "LAN"
+String mac();
 const char* status();        // متن کوتاه برای منو
 bool timeValid();            // ساعت درست است؟ (TLS و قواعد زمانی به آن نیاز دارند)
 uint64_t epochMs();          // زمان UTC؛ 0 اگر ساعت معلوم نیست
@@ -241,6 +243,8 @@ namespace rules {
 void begin();
 void loop(bool serverReachable);
 void apply(const char* json, size_t len);   // پیام قواعد (از هر Task)
+bool setClock(const char* iso, bool force);  // ساعت از سرور/هاب (ISO UTC)؛ force: هاب، حتی اگر ساعت معتبر است
+void setOffset(int32_t minutes);             // اختلاف ساعت محلی (ایران ۲۱۰)
 uint8_t count();
 const char* version();
 }

@@ -254,11 +254,17 @@ void loop() {
   }
 }
 
-// پیام config از هاب (از MQTT یا HTTP): {"type":"config","local":{enabled,key,version,port}}.
+// پیام config از هاب (از MQTT یا HTTP): {"type":"config","local":{enabled,key,version,port}}
+// یا از هاب مرکزی ساختمان: {"type":"time","server_time":"<ISO UTC>","utc_offset_min":210}.
 // کلید تازه در NVS ذخیره می‌شود؛ nonceهای باز کلید قدیمی باطل می‌شوند. پورت جدید پس از ریست بعدی اعمال می‌شود.
 void applyConfig(const char* json, size_t len) {
   JsonDocument doc;
   if (deserializeJson(doc, json, len)) return;
+  if (!strcmp(doc["type"] | "", "time")) {     // هاب مرکزی: ساعت بدون اینترنت (و هر ۶ ساعت)
+    rules::setClock(doc["server_time"] | "", true);
+    if (doc["utc_offset_min"].is<int>()) rules::setOffset(doc["utc_offset_min"].as<int>());
+    return;
+  }
   JsonVariantConst l = doc["local"];
   if (!l.is<JsonObjectConst>()) return;
   bool enabled = l["enabled"] | false;
@@ -292,7 +298,8 @@ uint16_t port() { return listenPort; }
 
 String addr() {
   if (!net::up()) return String();
-  IPAddress ip = WiFi.localIP();
+  IPAddress ip;
+  ip.fromString(net::ip());                       // وای‌فای یا LAN، هر کدام فعال است
   return privateIp(ip) ? ip.toString() : String();
 }
 
