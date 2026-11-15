@@ -180,8 +180,26 @@ void handleState(AsyncWebServerRequest* r) {
   answer(r, 200, d);
 }
 
+// The phone's clock for a module that has none (no NTP, no server, no hub): signed like a
+// command, accepted only while the module's own clock is not valid yet (never overrides NTP).
+void handleTime(AsyncWebServerRequest* r) {
+  JsonDocument b;
+  if (!body(r, b)) return fail(r, 400, "bad request");
+  if (!keySet()) return fail(r, 403, "local control is not set up");
+  const char* nonce = b["nonce"] | "";
+  if (!takeNonce(nonce)) return fail(r, 401, "nonce");
+  const char* iso = b["time"] | "";
+  String msg = String(settings::cur.deviceId) + "\n" + nonce + "\ntime\n" + iso;
+  if (!verify(msg, b["sig"] | "")) return fail(r, 401, "signature");
+  JsonDocument d;
+  d["ok"] = true;
+  d["set"] = rules::setClock(iso, false);
+  answer(r, 200, d);
+}
+
 void startServer() {
   server = new AsyncWebServer(listenPort);
+  server->on("/local/v1/time", HTTP_POST, handleTime, nullptr, onBody);
   server->on("/local/v1/info", HTTP_GET, [](AsyncWebServerRequest* r) {
     JsonDocument d;
     d["device_id"] = settings::cur.deviceId;
